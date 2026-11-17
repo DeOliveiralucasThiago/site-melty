@@ -1,5 +1,5 @@
 import { getPlatformProxy } from "wrangler";
-import { validarCpf, normalizarEmail, normalizarEndereco, hashDado, calcularPedido, reservarCupom, confirmarUso, liberarUso, registrarCompra, ErroNegocio } from "../functions/_lib/cupons.js";
+import { validarCpf, hashDado, calcularPedido, reservarCupom, confirmarUso, liberarUso, registrarCompra, ErroNegocio } from "../functions/_lib/cupons.js";
 import { precoVigente } from "../functions/_lib/precos.js";
 
 const { env, dispose } = await getPlatformProxy({ configPath: new URL("../wrangler.toml", import.meta.url).pathname, persist: { path: new URL("../.wrangler/state/v3", import.meta.url).pathname } });
@@ -15,11 +15,6 @@ t("CPF com máscara", validarCpf("529.982.247-25") === "52998224725");
 t("CPF com dígito errado", validarCpf("52998224726") === null);
 t("CPF repetido (111.111.111-11)", validarCpf("11111111111") === null);
 t("CPF curto/vazio", validarCpf("123") === null && validarCpf("") === null && validarCpf(null) === null);
-t("e-mail gmail: pontos e +tag", normalizarEmail("Jo.Ao+promo@Gmail.com") === "joao@gmail.com");
-t("e-mail não-gmail mantém pontos", normalizarEmail("a.b@exemplo.com.br") === "a.b@exemplo.com.br");
-t("e-mail inválido", normalizarEmail("naoeemail") === null);
-t("endereço normalizado", normalizarEndereco({ cep: "29.100-000", numero: "12-A", complemento: "Apto 3" }) === "29100000|12a|apto3");
-t("endereço sem CEP/número", normalizarEndereco({ cep: "123", numero: "1" }) === null);
 const h1 = await hashDado(env, "cpf", CPF.a), h2 = await hashDado(env, "email", CPF.a);
 t("hash não contém o CPF e difere por tipo", !h1.includes(CPF.a) && h1 !== h2 && h1.length === 64);
 
@@ -52,7 +47,7 @@ const novoCupom = async (o) => {
     .bind(c.codigo, c.tipo, c.valor, c.limite_total, c.so_primeira_compra, c.valor_minimo_centavos, c.inicio, c.fim, c.escopo, c.escopo_ids, c.acumula_promocao, c.ativo).run();
   return rr.meta.last_row_id;
 };
-const calc = (cupom, extra = {}, i = itens) => calcularPedido(db, env, { itens: i, cupom, cpf: CPF.a, email: "ana@exemplo.com", ...extra });
+const calc = (cupom, extra = {}, i = itens) => calcularPedido(db, env, { itens: i, cupom, cpf: CPF.a, ...extra });
 
 await novoCupom({ codigo: "DEZ", tipo: "percentual", valor: 10 });
 r = await calc("dez");
@@ -82,21 +77,21 @@ t("cupom inexistente", (await erroCodigo(() => calc("NAOEXISTE"))) === "cupom");
 t("cupom exige CPF válido", (await erroCodigo(() => calc("DEZ", { cpf: "123" }))) === "cpf");
 t("cupom exige CPF (vazio)", (await erroCodigo(() => calc("DEZ", { cpf: "" }))) === "cpf");
 
-// ---- limite de usos, CPF e e-mail ----
+// ---- limite de usos e CPF ----
 const idLim = await novoCupom({ codigo: "TRES", tipo: "percentual", valor: 10, limite_total: 3 });
-const res = (cpf, email, ref, minutos) => reservarCupom(db, env, { cupomId: idLim, cpf, email, pedidoRef: ref, descontoCentavos: 100, minutos });
-await res(CPF.a, "a@exemplo.com", "P1");
-t("mesmo CPF não usa duas vezes", (await erroCodigo(() => res(CPF.a, "outro@exemplo.com", "P1b"))) === "cpf_ja_usou");
-t("mesmo e-mail (outro CPF) não usa duas vezes", (await erroCodigo(() => res(CPF.b, "a@exemplo.com", "P2x"))) === "email_ja_usou");
-await res(CPF.b, "b@gmail.com", "P2");
-t("e-mail gmail com ponto/+tag é o mesmo e-mail", (await erroCodigo(() => res(CPF.c, "b+teste@gmail.com", "P3x"))) === "email_ja_usou" && (await erroCodigo(() => res(CPF.c, "B@googlemail.com", "P3y"))) === "email_ja_usou");
+const res = (cpf, ref, minutos) => reservarCupom(db, env, { cupomId: idLim, cpf, pedidoRef: ref, descontoCentavos: 100, minutos });
+await res(CPF.a, "P1");
+t("mesmo CPF não usa duas vezes", (await erroCodigo(() => res(CPF.a, "P1b"))) === "cpf_ja_usou");
+t("mesmo CPF com a máscara escrita diferente também é bloqueado", (await erroCodigo(() => res("529.982.247-25", "P1c"))) === "cpf_ja_usou");
+await res(CPF.b, "P2");   // CPF diferente = pessoa diferente, mesmo que use o mesmo e-mail ou endereço
 t("validação mostra 'já usou' para o CPF reservado", (await erroCodigo(() => calc("TRES", { cpf: CPF.a }))) === "cpf_ja_usou");
-await res(CPF.c, "c@exemplo.com", "P3");
-t("limite total atingido: reserva recusada", (await erroCodigo(() => res(CPF.d, "d@exemplo.com", "P4"))) === "cupom_esgotado");
-t("limite total atingido: cálculo recusa", (await erroCodigo(() => calc("TRES", { cpf: CPF.d, email: "d@exemplo.com" }))) === "cupom_esgotado");
+t("CPF diferente com e-mail igual/parecido não é bloqueado (são pessoas diferentes)", (await erroCodigo(() => calc("TRES", { cpf: CPF.c, email: "ana@exemplo.com" }))) === null && (await erroCodigo(() => calc("TRES", { cpf: CPF.c, email: "a.na+x@exemplo.com" }))) === null);
+await res(CPF.c, "P3");
+t("limite total atingido: reserva recusada", (await erroCodigo(() => res(CPF.d, "P4"))) === "cupom_esgotado");
+t("limite total atingido: cálculo recusa", (await erroCodigo(() => calc("TRES", { cpf: CPF.d }))) === "cupom_esgotado");
 await liberarUso(db, "P3");
-t("cupom liberado (pedido cancelado) volta a ficar disponível", (await erroCodigo(() => res(CPF.d, "d@exemplo.com", "P4"))) === null);
-await confirmarUso(db, env, { pedidoRef: "P2", cpf: CPF.b, email: "b@gmail.com", endereco: { cep: "29100000", numero: "10" } });
+t("cupom liberado (pedido cancelado) volta a ficar disponível", (await erroCodigo(() => res(CPF.d, "P4"))) === null);
+await confirmarUso(db, env, { pedidoRef: "P2", cpf: CPF.b });
 await liberarUso(db, "P2");
 const st = await db.prepare("SELECT status FROM cupom_usos WHERE pedido_ref = 'P2'").first();
 t("uso consumido (pago) não é liberado depois", st.status === "consumido", st.status);
@@ -104,40 +99,35 @@ t("uso consumido (pago) não é liberado depois", st.status === "consumido", st.
 // ---- uso simultâneo: 8 pessoas diferentes disputam 3 vagas ----
 const idCorr = await novoCupom({ codigo: "CORRIDA", limite_total: 3 });
 const cpfs = ["52998224725", "11144477735", "39053344705", "86288366757", "71428793860", "93541134780", "15350946056", "01234567890"].filter(validarCpf).slice(0, 8);
-const resultados = await Promise.all(cpfs.map((c, i) => reservarCupom(db, env, { cupomId: idCorr, cpf: c, email: `p${i}@exemplo.com`, pedidoRef: "C" + i, descontoCentavos: 1 }).then(() => "ok", (e) => e.codigo)));
+const resultados = await Promise.all(cpfs.map((c, i) => reservarCupom(db, env, { cupomId: idCorr, cpf: c, pedidoRef: "C" + i, descontoCentavos: 1 }).then(() => "ok", (e) => e.codigo)));
 const vagas = resultados.filter((x) => x === "ok").length;
 const { n: gravados } = await db.prepare("SELECT COUNT(*) AS n FROM cupom_usos WHERE cupom_id = ? AND status = 'reservado'").bind(idCorr).first();
 t(`corrida: ${cpfs.length} disputando 3 vagas → exatamente 3 usos`, vagas === 3 && gravados === 3, JSON.stringify({ resultados, gravados }));
 
 // ---- o mesmo CPF tentando 5 vezes ao mesmo tempo ----
 const idMesmo = await novoCupom({ codigo: "MESMOCPF" });
-const rr = await Promise.all([1, 2, 3, 4, 5].map((i) => reservarCupom(db, env, { cupomId: idMesmo, cpf: CPF.e, email: `z${i}@exemplo.com`, pedidoRef: "M" + i, descontoCentavos: 1 }).then(() => "ok", (e) => e.codigo)));
-t("mesmo CPF em 5 tentativas simultâneas → 1 uso só", rr.filter((x) => x === "ok").length === 1, JSON.stringify(rr));
+const rr = await Promise.all([1, 2, 3, 4, 5].map((i) => reservarCupom(db, env, { cupomId: idMesmo, cpf: CPF.e, pedidoRef: "M" + i, descontoCentavos: 1 }).then(() => "ok", (e) => e.codigo)));
+t("mesmo CPF em 5 tentativas simultâneas (e-mails diferentes) → 1 uso só", rr.filter((x) => x === "ok").length === 1, JSON.stringify(rr));
 
 // ---- reserva vence sozinha ----
 const idVenc = await novoCupom({ codigo: "VENCE", limite_total: 1 });
-await reservarCupom(db, env, { cupomId: idVenc, cpf: CPF.a, email: "v1@exemplo.com", pedidoRef: "V1", descontoCentavos: 1, minutos: 30 });
-t("dentro dos 30 min a vaga continua presa", (await erroCodigo(() => reservarCupom(db, env, { cupomId: idVenc, cpf: CPF.b, email: "v2@exemplo.com", pedidoRef: "V2", descontoCentavos: 1 }))) === "cupom_esgotado");
+await reservarCupom(db, env, { cupomId: idVenc, cpf: CPF.a, pedidoRef: "V1", descontoCentavos: 1, minutos: 30 });
+t("dentro dos 30 min a vaga continua presa", (await erroCodigo(() => reservarCupom(db, env, { cupomId: idVenc, cpf: CPF.b, pedidoRef: "V2", descontoCentavos: 1 }))) === "cupom_esgotado");
 const depois = new Date(Date.now() + 31 * 60000);
-t("após 31 min sem pagar, a vaga é liberada", (await erroCodigo(() => reservarCupom(db, env, { cupomId: idVenc, cpf: CPF.b, email: "v2@exemplo.com", pedidoRef: "V2", descontoCentavos: 1 }, depois))) === null);
+t("após 31 min sem pagar, a vaga é liberada", (await erroCodigo(() => reservarCupom(db, env, { cupomId: idVenc, cpf: CPF.b, pedidoRef: "V2", descontoCentavos: 1 }, depois))) === null);
 
-// ---- primeira compra ----
+// ---- primeira compra (só pelo CPF) ----
 await novoCupom({ codigo: "BEMVINDO", tipo: "percentual", valor: 15, so_primeira_compra: 1 });
-const end = { cep: "29.100-000", numero: "100", complemento: "casa" };
-const novo = { cpf: CPF.d, email: "novo@exemplo.com", endereco: { cep: "29200-000", numero: "5" } };
-t("cliente novo pode usar", (await calc("BEMVINDO", novo)).desconto_centavos > 0);
-t("primeira compra exige endereço", (await erroCodigo(() => calc("BEMVINDO", { ...novo, endereco: undefined }))) === "endereco");
-await registrarCompra(db, env, { pedidoRef: "ANTIGO", cpf: CPF.a, email: "ana@exemplo.com", endereco: end });
-t("mesmo CPF que já comprou é recusado", (await erroCodigo(() => calc("BEMVINDO", { cpf: CPF.a, email: "x@y.com", endereco: { cep: "29999-000", numero: "1" } }))) === "primeira_compra");
-t("outro CPF mas mesmo e-mail de quem já comprou", (await erroCodigo(() => calc("BEMVINDO", { cpf: CPF.d, email: "ana@exemplo.com", endereco: { cep: "29999-000", numero: "1" } }))) === "primeira_compra");
-t("outro CPF e e-mail mas mesmo endereço de quem já comprou", (await erroCodigo(() => calc("BEMVINDO", { cpf: CPF.d, email: "outro@x.com", endereco: end }))) === "primeira_compra");
-t("endereço escrito de outro jeito (maiúsculas, pontuação) é o mesmo", (await erroCodigo(() => calc("BEMVINDO", { cpf: CPF.d, email: "outro@x.com", endereco: { cep: "29100000", numero: "100", complemento: "CASA!" } }))) === "primeira_compra");
-await registrarCompra(db, env, { pedidoRef: "G", cpf: CPF.b, email: "maria.silva@gmail.com", endereco: { cep: "29300-000", numero: "7" } });
-t("e-mail gmail com ponto de quem já comprou", (await erroCodigo(() => calc("BEMVINDO", { cpf: CPF.e, email: "mariasilva+x@gmail.com", endereco: { cep: "29999-000", numero: "9" } }))) === "primeira_compra");
+t("cliente novo pode usar", (await calc("BEMVINDO", { cpf: CPF.d })).desconto_centavos > 0);
+await registrarCompra(db, env, { pedidoRef: "ANTIGO", cpf: CPF.a });
+t("CPF que já comprou é recusado", (await erroCodigo(() => calc("BEMVINDO", { cpf: CPF.a }))) === "primeira_compra");
+t("CPF que já comprou, escrito com máscara, também", (await erroCodigo(() => calc("BEMVINDO", { cpf: "529.982.247-25" }))) === "primeira_compra");
+t("outro CPF com o mesmo e-mail/endereço de quem já comprou PODE usar (outra pessoa)", (await erroCodigo(() => calc("BEMVINDO", { cpf: CPF.d, email: "ana@exemplo.com", endereco: { cep: "29100-000", numero: "100" } }))) === null);
+t("pedido só reservado (não pago) ainda não conta como 'já comprou'", (await erroCodigo(() => calc("BEMVINDO", { cpf: CPF.e }))) === null);
 
 // ---- privacidade: nada aberto no banco ----
 const dump = JSON.stringify((await db.prepare("SELECT * FROM cupom_usos").all()).results) + JSON.stringify((await db.prepare("SELECT * FROM compradores").all()).results);
-t("banco não guarda CPF nem e-mail abertos", !Object.values(CPF).some((c) => dump.includes(c)) && !dump.includes("@exemplo.com") && !dump.includes("29100000"));
+t("banco não guarda o CPF aberto", !Object.values(CPF).some((c) => dump.includes(c)));
 
 console.log(`\n${ok} ok, ${bad} falhas`);
 await dispose();

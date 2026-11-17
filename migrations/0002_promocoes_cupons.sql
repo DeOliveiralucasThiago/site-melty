@@ -21,12 +21,11 @@ CREATE TABLE cupons (
   criado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Cada uso de cupom. Só guarda códigos embaralhados (HMAC) do CPF e do e-mail, nunca os dados abertos.
+-- Cada uso de cupom. O controle é só pelo CPF, guardado apenas como código embaralhado (HMAC), nunca aberto.
 CREATE TABLE cupom_usos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   cupom_id INTEGER NOT NULL REFERENCES cupons(id),
   cpf_hash TEXT NOT NULL,
-  email_hash TEXT,
   pedido_ref TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('reservado', 'consumido', 'liberado')),
   desconto_centavos INTEGER NOT NULL DEFAULT 0,
@@ -34,20 +33,15 @@ CREATE TABLE cupom_usos (
   expira_em TEXT,
   atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
--- O próprio banco impede o mesmo CPF (ou e-mail) de ter dois usos ativos do mesmo cupom
+-- O próprio banco impede o mesmo CPF de ter dois usos ativos do mesmo cupom
 CREATE UNIQUE INDEX idx_uso_cpf ON cupom_usos (cupom_id, cpf_hash) WHERE status IN ('reservado', 'consumido');
-CREATE UNIQUE INDEX idx_uso_email ON cupom_usos (cupom_id, email_hash) WHERE status IN ('reservado', 'consumido') AND email_hash IS NOT NULL;
 CREATE INDEX idx_uso_pedido ON cupom_usos (pedido_ref);
 
 -- Quem já comprou (para o cupom de primeira compra). Preenchido quando um pedido é pago.
 CREATE TABLE compradores (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   cpf_hash TEXT NOT NULL,
-  email_hash TEXT,
-  endereco_hash TEXT,
   pedido_ref TEXT NOT NULL,
   criado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX idx_comp_cpf ON compradores (cpf_hash);
-CREATE INDEX idx_comp_email ON compradores (email_hash);
-CREATE INDEX idx_comp_end ON compradores (endereco_hash);

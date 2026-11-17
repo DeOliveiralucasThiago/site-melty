@@ -6,7 +6,7 @@ export class ErroNegocio extends Error {
   constructor(mensagem, codigo) { super(mensagem); this.codigo = codigo; }
 }
 
-/* ---------- CPF, e-mail e endereço ---------- */
+/* ---------- CPF ---------- */
 
 // Devolve só os 11 dígitos se o CPF for válido (dígitos verificadores corretos); senão null.
 export function validarCpf(entrada) {
@@ -19,25 +19,6 @@ export function validarCpf(entrada) {
     return r === 10 ? 0 : r;
   };
   return dv(d.slice(0, 9)) === Number(d[9]) && dv(d.slice(0, 10)) === Number(d[10]) ? d : null;
-}
-
-// Gmail ignora pontos e o que vem depois do "+": a+b@gmail.com e a.b@gmail.com são a mesma caixa
-export function normalizarEmail(entrada) {
-  const e = String(entrada ?? "").trim().toLowerCase();
-  const m = /^([^@\s]+)@([^@\s]+\.[^@\s]+)$/.exec(e);
-  if (!m) return null;
-  let [, usuario, dominio] = m;
-  if (dominio === "googlemail.com") dominio = "gmail.com";
-  if (dominio === "gmail.com") usuario = usuario.split("+")[0].replace(/\./g, "");
-  else usuario = usuario.split("+")[0];
-  return usuario ? `${usuario}@${dominio}` : null;
-}
-
-export function normalizarEndereco({ cep, numero, complemento } = {}) {
-  const cepD = String(cep ?? "").replace(/\D/g, "");
-  const limpa = (t) => String(t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (cepD.length !== 8 || !limpa(numero)) return null;
-  return `${cepD}|${limpa(numero)}|${limpa(complemento)}`;
 }
 
 // Código embaralhado com chave secreta (HMAC). Sem a chave não dá para descobrir o CPF a partir do código.
@@ -72,7 +53,7 @@ function limparItens(itens) {
 
 /**
  * Calcula o pedido e valida o cupom (sem gravar nada).
- * entrada: { itens: [{id, qtd}], cupom?, cpf?, email?, endereco?: {cep, numero, complemento} }
+ * entrada: { itens: [{id, qtd}], cupom?, cpf? }  (o cupom é controlado só pelo CPF)
  * Lança ErroNegocio com mensagem pronta para o cliente.
  */
 export async function calcularPedido(db, env, entrada, { agora = new Date() } = {}) {
@@ -109,22 +90,13 @@ export async function calcularPedido(db, env, entrada, { agora = new Date() } = 
   const cpf = validarCpf(entrada.cpf);
   if (!cpf) throw new ErroNegocio("Informe um CPF válido para usar o cupom.", "cpf");
   const cpfHash = await hashDado(env, "cpf", cpf);
-  const email = normalizarEmail(entrada.email);
-  const emailHash = email ? await hashDado(env, "email", email) : null;
 
   if (await db.prepare(`SELECT 1 FROM cupom_usos WHERE cupom_id = ? AND cpf_hash = ? AND ${ATIVO}`).bind(c.id, cpfHash).first())
     throw new ErroNegocio("Este cupom já foi usado neste CPF.", "cpf_ja_usou");
-  if (emailHash && await db.prepare(`SELECT 1 FROM cupom_usos WHERE cupom_id = ? AND email_hash = ? AND ${ATIVO}`).bind(c.id, emailHash).first())
-    throw new ErroNegocio("Este cupom já foi usado com este e-mail.", "email_ja_usou");
 
-  if (c.so_primeira_compra) {
-    const end = normalizarEndereco(entrada.endereco);
-    const endHash = end ? await hashDado(env, "endereco", end) : null;
-    if (!end) throw new ErroNegocio("Informe o endereço de entrega para validar o cupom de primeira compra.", "endereco");
-    const ja = await db.prepare("SELECT 1 FROM compradores WHERE cpf_hash = ? OR (? IS NOT NULL AND email_hash = ?) OR (? IS NOT NULL AND endereco_hash = ?) LIMIT 1")
-      .bind(cpfHash, emailHash, emailHash, endHash, endHash).first();
-    if (ja) throw new ErroNegocio("Este cupom é válido apenas para a primeira compra.", "primeira_compra");
-  }
+  // Primeira compra: este CPF nunca pagou um pedido antes
+  if (c.so_primeira_compra && await db.prepare("SELECT 1 FROM compradores WHERE cpf_hash = ? LIMIT 1").bind(cpfHash).first())
+    throw new ErroNegocio("Este cupom é válido apenas para a primeira compra.", "primeira_compra");
 
   // Quais itens o cupom alcança: dentro do escopo e (se não acumula) fora de promoção
   const ids = JSON.parse(c.escopo_ids);
@@ -152,35 +124,32 @@ export async function calcularPedido(db, env, entrada, { agora = new Date() } = 
 
 /**
  * Reserva o cupom para um pedido, de forma atômica: confere o limite e grava no mesmo comando,
- * e o banco impede um segundo uso do mesmo CPF/e-mail. Chamar logo após calcularPedido, ao criar o pedido.
+ * e o banco impede um segundo uso do mesmo CPF. Chamar logo após calcularPedido, ao criar o pedido.
  */
-export async function reservarCupom(db, env, { cupomId, cpf, email, pedidoRef, descontoCentavos, minutos = 30 }, agora = new Date()) {
+export async function reservarCupom(db, env, { cupomId, cpf, pedidoRef, descontoCentavos, minutos = 30 }, agora = new Date()) {
   const cpfValido = validarCpf(cpf);
   if (!cpfValido) throw new ErroNegocio("CPF inválido.", "cpf");
   const cpfHash = await hashDado(env, "cpf", cpfValido);
-  const e = normalizarEmail(email);
-  const emailHash = e ? await hashDado(env, "email", e) : null;
   await libera(db, agora);
   const expira = new Date(agora.getTime() + minutos * 60000).toISOString().slice(0, 19).replace("T", " ");
   try {
     const r = await db.prepare(
-      `INSERT INTO cupom_usos (cupom_id, cpf_hash, email_hash, pedido_ref, status, desconto_centavos, expira_em)
-       SELECT ?, ?, ?, ?, 'reservado', ?, ?
+      `INSERT INTO cupom_usos (cupom_id, cpf_hash, pedido_ref, status, desconto_centavos, expira_em)
+       SELECT ?, ?, ?, 'reservado', ?, ?
        WHERE (SELECT COUNT(*) FROM cupom_usos WHERE cupom_id = ? AND ${ATIVO}) < COALESCE((SELECT limite_total FROM cupons WHERE id = ?), 1000000000)`)
-      .bind(cupomId, cpfHash, emailHash, pedidoRef, descontoCentavos, expira, cupomId, cupomId).run();
+      .bind(cupomId, cpfHash, pedidoRef, descontoCentavos, expira, cupomId, cupomId).run();
     if (!r.meta.changes) throw new ErroNegocio("Este cupom esgotou.", "cupom_esgotado");
   } catch (err) {
     if (err instanceof ErroNegocio) throw err;
     if (/idx_uso_cpf|cpf_hash/.test(String(err.message))) throw new ErroNegocio("Este cupom já foi usado neste CPF.", "cpf_ja_usou");
-    if (/idx_uso_email|email_hash/.test(String(err.message))) throw new ErroNegocio("Este cupom já foi usado com este e-mail.", "email_ja_usou");
     throw err;
   }
 }
 
-// Pagamento confirmado: o uso passa a definitivo e o comprador entra no registro de "já comprou"
-export async function confirmarUso(db, env, { pedidoRef, cpf, email, endereco }) {
+// Pagamento confirmado: o uso passa a definitivo e o CPF entra no registro de "já comprou"
+export async function confirmarUso(db, env, { pedidoRef, cpf }) {
   await db.prepare("UPDATE cupom_usos SET status = 'consumido', expira_em = NULL, atualizado_em = datetime('now') WHERE pedido_ref = ? AND status = 'reservado'").bind(pedidoRef).run();
-  await registrarCompra(db, env, { pedidoRef, cpf, email, endereco });
+  await registrarCompra(db, env, { pedidoRef, cpf });
 }
 
 // Pedido cancelado ou vencido: o cupom volta a ficar disponível
@@ -188,10 +157,8 @@ export async function liberarUso(db, pedidoRef) {
   await db.prepare("UPDATE cupom_usos SET status = 'liberado', atualizado_em = datetime('now') WHERE pedido_ref = ? AND status = 'reservado'").bind(pedidoRef).run();
 }
 
-export async function registrarCompra(db, env, { pedidoRef, cpf, email, endereco }) {
+export async function registrarCompra(db, env, { pedidoRef, cpf }) {
   const c = validarCpf(cpf);
   if (!c) return;
-  const e = normalizarEmail(email), en = normalizarEndereco(endereco);
-  await db.prepare("INSERT INTO compradores (cpf_hash, email_hash, endereco_hash, pedido_ref) VALUES (?, ?, ?, ?)")
-    .bind(await hashDado(env, "cpf", c), e ? await hashDado(env, "email", e) : null, en ? await hashDado(env, "endereco", en) : null, pedidoRef).run();
+  await db.prepare("INSERT INTO compradores (cpf_hash, pedido_ref) VALUES (?, ?)").bind(await hashDado(env, "cpf", c), pedidoRef).run();
 }

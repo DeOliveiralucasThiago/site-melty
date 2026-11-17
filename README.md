@@ -14,10 +14,11 @@ navegador e guardadas no próprio banco (sem serviço extra, sem cartão cadastr
 
 ## Preços e cupons (regras no servidor)
 `functions/_lib/cupons.js` calcula o pedido: o navegador só diz quais produtos, quantas unidades e o cupom; o servidor
-recalcula tudo. Regras: 1 cupom por pedido; 1 uso por CPF e por e-mail (o próprio banco impede repetição, mesmo em
+recalcula tudo. Regras: 1 cupom por pedido; 1 uso por CPF (o próprio banco impede repetição, mesmo em
 pedidos simultâneos); limite total de usos; reserva por 30 min enquanto o pagamento está pendente (vence sozinha);
-"primeira compra" confere CPF, e-mail e endereço de quem já comprou; cupom não vale sobre item já em promoção
-(salvo opção marcada). CPF e e-mail ficam só como código embaralhado (HMAC com `HASH_SECRET`), nunca abertos.
+"primeira compra" = CPF que ainda não pagou nenhum pedido; cupom não vale sobre item já em promoção
+(salvo opção marcada). O controle é só pelo CPF (e-mail e endereço não bloqueiam: CPFs diferentes são pessoas diferentes),
+guardado só como código embaralhado (HMAC com `HASH_SECRET`), nunca aberto.
 Na Fase 3, o pedido deve chamar `calcularPedido` → `reservarCupom` ao criar e `confirmarUso`/`liberarUso` ao pagar/cancelar.
 
 ## Rodar no computador (teste)

@@ -467,7 +467,7 @@
 
   function abaCupons(main) {
     main.appendChild(h("h1", null, "Cupons de desconto"));
-    main.appendChild(h("p", { class: "dica" }, "Cada cupom vale uma vez por CPF (e por e-mail), não se soma a outro cupom no mesmo pedido, e o desconto é calculado pelo servidor. Quando o limite de usos acaba, o cupom fica “Esgotado” sozinho. Os cupons passam a valer para os clientes quando o pagamento online for ativado."));
+    main.appendChild(h("p", { class: "dica" }, "Cada cupom vale uma vez por CPF, não se soma a outro cupom no mesmo pedido, e o desconto é calculado pelo servidor. Quando o limite de usos acaba, o cupom fica “Esgotado” sozinho. Os cupons passam a valer para os clientes quando o pagamento online for ativado."));
     main.appendChild(h("div", { class: "barra" }, h("span", { class: "espaco" }), h("button", { class: "btn", onclick: function () { formCupom(null); } }, "+ Novo cupom")));
     if (!S.cupons.length) main.appendChild(h("p", { class: "vazio" }, "Nenhum cupom ainda."));
     S.cupons.forEach(function (c) {
@@ -559,7 +559,7 @@
         h("div", { class: "grade3" }, campo("Tipo", f.tipo), h("div", null, rotV, f.valor), campo("Limite de usos", f.limite, "Ex.: 10. Ao acabar, fica esgotado.")),
         h("div", { class: "grade3" }, campo("Pedido mínimo (R$)", f.minimo, "Soma dos itens que o cupom alcança."), campo("Vale a partir de", f.inicio), campo("Vale até (inclusive)", f.fim)),
         campo("Onde vale", f.escopo), lista,
-        h("label", { class: "chk" }, f.primeira, "Só para a primeira compra (confere CPF, e-mail e endereço de quem já comprou)"),
+        h("label", { class: "chk" }, f.primeira, "Só para a primeira compra (vale se o CPF ainda não comprou nada na loja)"),
         h("label", { class: "chk" }, f.acumula, "Também vale sobre produtos já em promoção"),
         h("label", { class: "chk" }, f.ativo, "Cupom ativo"),
         h("div", { class: "barra" },
