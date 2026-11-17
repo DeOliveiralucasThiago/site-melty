@@ -1,8 +1,9 @@
 // SÓ para desenvolvimento: simula o aviso do provedor (aprovado, recusado...). Fica desligado se PAGAMENTO_PROVEDOR != "teste".
 import { json, erro, lerJson } from "../../_lib/util.js";
 import { aplicarPagamento } from "../../_lib/pedidos.js";
+import { processarFila } from "../../_lib/email.js";
 
-export async function onRequestPost({ request, env, params }) {
+export async function onRequestPost({ request, env, params, waitUntil }) {
   if (env.PAGAMENTO_PROVEDOR !== "teste") return new Response("Não encontrado", { status: 404 });
   if (!/^[a-f0-9]{32}$/.test(params.token)) return erro("Pedido não encontrado.", 404);
   const p = await env.DB.prepare("SELECT * FROM pedidos WHERE token = ?").bind(params.token).first();
@@ -16,5 +17,7 @@ export async function onRequestPost({ request, env, params }) {
     reembolsar: { status: "reembolsado" },
   }[corpo.acao];
   if (!ev) return erro("Ação inválida.");
-  return json(await aplicarPagamento(env, params.token, ev));
+  const r = await aplicarPagamento(env, params.token, ev);
+  waitUntil(processarFila(env).catch((e) => console.error("fila de e-mails", e)));
+  return json(r);
 }

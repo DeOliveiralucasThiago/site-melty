@@ -100,3 +100,5 @@ input[type=date]{width:100%;border:1.5px solid var(--line);border-radius:10px;pa
 .linha-ped.total{font-weight:700;border-bottom:0}
 dialog input[readonly]{background:var(--tint)}
 .abas .etq{margin-left:6px;background:var(--brand);color:#fff}
+
+.preview-email{width:100%;height:60vh;border:1px solid var(--line);border-radius:10px;background:#fff}

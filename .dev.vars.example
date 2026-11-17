@@ -2,3 +2,9 @@
 ADMIN_PASSWORD=troque-por-uma-senha-forte
 SESSION_SECRET=troque-por-um-texto-aleatorio-com-32-ou-mais-caracteres
 HASH_SECRET=troque-por-outro-texto-aleatorio-com-32-ou-mais-caracteres
+EMAIL_PROVEDOR=teste
+# Para enviar e-mails de verdade (Resend):
+# EMAIL_PROVEDOR=resend
+# RESEND_API_KEY=re_...
+# EMAIL_REMETENTE=Melty <pedidos@mail.seudominio.com.br>
+# SITE_URL=https://www.seudominio.com.br

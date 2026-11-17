@@ -43,3 +43,5 @@ export async function limitar(db, chave, max, janelaMs) {
   return true;
 }
 export const ipDe = (request) => request.headers.get("cf-connecting-ip") || "local";
+
+export const numeroDoPedido = (id) => 1000 + id;

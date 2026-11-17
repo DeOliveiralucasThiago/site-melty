@@ -468,6 +468,17 @@
     (navigator.clipboard ? navigator.clipboard.writeText(texto) : Promise.reject()).then(function () { aviso("Copiado.", "ok"); }, function () { aviso("Não foi possível copiar. Selecione o texto e copie.", "erro"); });
   }
 
+  var EMAIL_ST = { pendente: ["Na fila", "cinza"], enviando: ["Enviando", "cinza"], enviado: ["Enviado", ""], simulado: ["Simulado (teste)", "cinza"], falhou: ["Falhou", "vermelha"], descartado: ["Descartado", "cinza"] };
+  var EMAIL_TIPO = { recebido: "Pedido recebido", pago: "Pagamento confirmado", enviado: "Pedido enviado", entregue: "Pedido entregue", cancelado: "Pedido cancelado", expirado: "Pedido expirado", reembolsado: "Reembolso" };
+  function verEmail(e) {
+    dialogo(function (dlg) {
+      return h("form", { method: "dialog" }, h("h2", null, EMAIL_TIPO[e.tipo] || e.tipo),
+        h("p", { class: "dica" }, "Para: " + e.para + " · Assunto: " + e.assunto),
+        h("iframe", { class: "preview-email", sandbox: "", title: "Pré-visualização do e-mail", src: "/api/admin/emails/" + e.id + "/html" }),
+        h("div", { class: "barra" }, h("button", { class: "btn sec", type: "button", onclick: function () { dlg.close(); } }, "Fechar")));
+    });
+  }
+
   function abaPedidos(main) {
     var filtro = h("select", { "aria-label": "Filtrar por situação" }, h("option", { value: "" }, "Todos os pedidos"),
       Object.keys(STATUS_PED).map(function (k) { return h("option", { value: k }, STATUS_PED[k][0]); }));
@@ -549,6 +560,20 @@
       })));
     } else if (p.rastreio) corpo.appendChild(h("p", null, "Rastreio: " + p.rastreio));
 
+    corpo.appendChild(h("h2", null, "E-mails para o cliente"));
+    if (!p.emails.length) corpo.appendChild(h("p", { class: "dica" }, "Nenhum e-mail para este pedido ainda."));
+    p.emails.forEach(function (e) {
+      var st = EMAIL_ST[e.status] || [e.status, "cinza"];
+      corpo.appendChild(h("div", { class: "linha-ped" },
+        h("span", null, EMAIL_TIPO[e.tipo] || e.tipo, h("span", { class: "etq " + st[1] }, st[0]), e.erro ? h("span", { class: "meta" }, " " + e.erro) : null),
+        h("span", { class: "acoes" },
+          h("button", { class: "btn sec mini", type: "button", onclick: function () { verEmail(e); } }, "Ver"),
+          h("button", { class: "btn sec mini", type: "button", onclick: function () {
+            if (!confirm("Reenviar o e-mail “" + (EMAIL_TIPO[e.tipo] || e.tipo) + "” para " + e.para + "?")) return;
+            acao(api("POST", "/emails/" + e.id + "/reenviar"), "E-mail reenviado.").then(function () { return api("GET", "/pedidos/" + p.id); })
+              .then(function (n) { desenharDetalhe(n, corpo, fechar, dlg); }).catch(function () {});
+          } }, "Reenviar"))));
+    });
     corpo.appendChild(h("h2", null, "Link de acompanhamento do cliente"));
     corpo.appendChild(h("div", { class: "barra" }, h("input", { type: "text", readonly: true, value: link, "aria-label": "Link de acompanhamento" }), h("button", { class: "btn sec mini", type: "button", onclick: function () { copiar(link); } }, "Copiar")));
     corpo.appendChild(h("h2", null, "Histórico"));

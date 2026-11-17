@@ -6,6 +6,7 @@ export async function detalhe(db, id) {
   if (!p) return null;
   const itens = (await db.prepare("SELECT produto_id, nome, qtd, unitario_centavos, cheio_centavos, promocao FROM pedido_itens WHERE pedido_id = ? ORDER BY id").bind(id).all()).results;
   const eventos = (await db.prepare("SELECT tipo, detalhe, criado_em FROM pedido_eventos WHERE pedido_id = ? ORDER BY id").bind(id).all()).results;
+  const emails = (await db.prepare("SELECT id, tipo, para, assunto, status, tentativas, erro, enviado_em, atualizado_em FROM emails WHERE pedido_id = ? ORDER BY id").bind(id).all()).results;
   const codigos = p.revisao ? p.revisao.split(",") : [];
   return {
     id: p.id, numero: numeroDoPedido(p.id), token: p.token, status: p.status, status_texto: STATUS_TEXTO[p.status],
@@ -16,6 +17,7 @@ export async function detalhe(db, id) {
     cupom: p.cupom_codigo, rastreio: p.rastreio, provedor: p.provedor, pagamento_ref: p.pagamento_ref,
     revisao: codigos.map((c) => ({ codigo: c, texto: REVISAO_TEXTO[c] || c })),
     criado_em: p.criado_em, pago_em: p.pago_em, enviado_em: p.enviado_em, entregue_em: p.entregue_em, expira_em: p.expira_em,
+    emails: emails.map((e) => ({ id: e.id, tipo: e.tipo, para: e.para, assunto: e.assunto, status: e.status, tentativas: e.tentativas, erro: e.erro, quando: e.enviado_em || e.atualizado_em })),
     eventos: eventos.map((e) => ({ tipo: e.tipo, detalhe: e.detalhe, quando: e.criado_em })),
   };
 }

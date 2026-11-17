@@ -2,9 +2,13 @@
 import { calcularPedido, reservarCupom, confirmarUso, liberarUso, registrarCompra, validarCpf, ErroNegocio } from "./cupons.js";
 import { provedor } from "./pagamento.js";
 import * as v from "./validar.js";
+import { numeroDoPedido } from "./util.js";
+import { enfileirar } from "./email.js";
+export { numeroDoPedido };
 
 export const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
 export const MINUTOS_RESERVA = 30;
+const MOTIVO_EXPIRADO = "Pagamento não confirmado no prazo";
 export const STATUS_TEXTO = {
   aguardando_pagamento: "Aguardando pagamento", pago: "Pago", em_producao: "Em produção", enviado: "Enviado",
   entregue: "Entregue", cancelado: "Cancelado", reembolsado: "Reembolsado",
@@ -17,7 +21,6 @@ export const REVISAO_TEXTO = {
 };
 
 const agoraSql = (d = new Date()) => d.toISOString().slice(0, 19).replace("T", " ");
-export const numeroDoPedido = (id) => 1000 + id;
 
 /* ---------- dados do cliente ---------- */
 export function lerCliente(c) {
@@ -56,7 +59,7 @@ export async function criarPedido(env, corpo, { urlBase }) {
   let cliente;
   try { cliente = lerCliente(corpo.cliente); }
   catch (e) { throw e instanceof ErroNegocio ? e : new ErroNegocio(e.message, "dados"); }
-  await liberarVencidos(db);
+  await liberarVencidos(db, env);
 
   const calc = await calcularPedido(db, env, { itens: corpo.itens, cupom: cliente.cupom, cpf: cliente.cpf });
   const frete = calc.frete_gratis ? 0 : await fretePadraoCentavos(db);
@@ -71,10 +74,10 @@ export async function criarPedido(env, corpo, { urlBase }) {
     // Tudo ou nada: se o estoque faltar, o banco recusa (estoque nunca fica negativo) e nada é gravado.
     await db.batch([
       db.prepare(`INSERT INTO pedidos (token, status, cliente_nome, cliente_email, cliente_telefone, cliente_cpf, end_cep, end_rua, end_numero, end_complemento, end_bairro, end_cidade, end_uf,
-                  subtotal_centavos, desconto_centavos, frete_centavos, total_centavos, cupom_codigo, provedor, expira_em)
-                  VALUES (?, 'aguardando_pagamento', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                  subtotal_centavos, desconto_centavos, frete_centavos, total_centavos, cupom_codigo, provedor, expira_em, url_base)
+                  VALUES (?, 'aguardando_pagamento', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .bind(token, cliente.nome, cliente.email, cliente.telefone, cliente.cpf, cliente.cep, cliente.rua, cliente.numero, cliente.complemento, cliente.bairro, cliente.cidade, cliente.uf,
-              calc.subtotal_centavos, calc.desconto_centavos, frete, total, calc.cupom?.codigo ?? "", prov.nome, expira),
+              calc.subtotal_centavos, calc.desconto_centavos, frete, total, calc.cupom?.codigo ?? "", prov.nome, expira, urlBase),
       ...calc.itens.map((l) => db.prepare(`INSERT INTO pedido_itens (pedido_id, produto_id, nome, qtd, unitario_centavos, cheio_centavos, promocao) VALUES (${sub}, ?, ?, ?, ?, ?, ?)`)
         .bind(token, l.id, l.nome, l.qtd, l.unitario, l.cheio, l.promocao ? 1 : 0)),
       ...calc.itens.map((l) => db.prepare("UPDATE produtos SET estoque = estoque - ? WHERE id = ?").bind(l.qtd, l.id)),
@@ -90,9 +93,10 @@ export async function criarPedido(env, corpo, { urlBase }) {
   try {
     const cob = await prov.criarCobranca({ pedido, itens: calc.itens, cliente, urlBase });
     await db.prepare("UPDATE pedidos SET pagamento_url = ?, pagamento_ref = ? WHERE id = ?").bind(cob.url, cob.ref, pedido.id).run();
+    try { await enfileirar(db, pedido.id, "recebido", { env }); } catch (e) { console.error("e-mail recebido não enfileirado", e); }
     return { token, numero: numeroDoPedido(pedido.id), url: cob.url };
   } catch (err) {
-    await cancelarPedido(db, pedido.id, "Falha ao iniciar o pagamento");
+    await cancelarPedido(db, pedido.id, "Falha ao iniciar o pagamento", { avisar: false });
     throw new ErroNegocio("Não foi possível iniciar o pagamento agora. Tente de novo em instantes.", "pagamento");
   }
 }
@@ -103,7 +107,7 @@ async function evento(db, pedidoId, tipo, detalhe = "") {
 }
 
 // Cancela, devolve os itens ao estoque (se pedido) e libera o cupom reservado.
-export async function cancelarPedido(db, id, motivo, { somenteAguardando = true, devolverEstoque = true } = {}) {
+export async function cancelarPedido(db, id, motivo, { somenteAguardando = true, devolverEstoque = true, avisar = true, env } = {}) {
   const p = await db.prepare("SELECT * FROM pedidos WHERE id = ?").bind(id).first();
   if (!p || ["cancelado", "reembolsado"].includes(p.status)) return false;
   if (somenteAguardando && p.status !== "aguardando_pagamento") return false;
@@ -116,12 +120,13 @@ export async function cancelarPedido(db, id, motivo, { somenteAguardando = true,
   }
   if (p.status === "aguardando_pagamento") await liberarUso(db, p.token);
   await evento(db, id, "cancelado", motivo);
+  if (avisar) { try { await enfileirar(db, id, motivo === MOTIVO_EXPIRADO ? "expirado" : "cancelado", { env }); } catch (e) { console.error("e-mail de cancelamento não enfileirado", e); } }
   return true;
 }
 
-export async function liberarVencidos(db) {
+export async function liberarVencidos(db, env) {
   const r = await db.prepare("SELECT id FROM pedidos WHERE status = 'aguardando_pagamento' AND expira_em < ? LIMIT 25").bind(agoraSql()).all();
-  for (const { id } of r.results) await cancelarPedido(db, id, "Pagamento não confirmado no prazo");
+  for (const { id } of r.results) await cancelarPedido(db, id, MOTIVO_EXPIRADO, { env });
 }
 
 /* ---------- pagamento (chamado pelo aviso do provedor) ---------- */
@@ -138,7 +143,7 @@ export async function aplicarPagamento(env, token, ev) {
 
   if (ev.status === "reembolsado") {
     const r = await db.prepare("UPDATE pedidos SET status = 'reembolsado', atualizado_em = datetime('now') WHERE id = ? AND status NOT IN ('reembolsado','aguardando_pagamento')").bind(p.id).run();
-    if (r.meta.changes) await evento(db, p.id, "reembolsado", ev.ref ?? "");
+    if (r.meta.changes) { await evento(db, p.id, "reembolsado", ev.ref ?? ""); try { await enfileirar(db, p.id, "reembolsado", { env }); } catch (e) { console.error(e); } }
     return { ok: true };
   }
   if (ev.status !== "aprovado") return { ok: false, motivo: "status_desconhecido" };
@@ -164,6 +169,7 @@ export async function aplicarPagamento(env, token, ev) {
   if (motivos.length) await db.prepare("UPDATE pedidos SET revisao = ? WHERE id = ?").bind(motivos.join(","), p.id).run();
   await confirmarUso(db, env, { pedidoRef: token, cpf: p.cliente_cpf });
   await evento(db, p.id, "pago", motivos.length ? "Atenção: " + motivos.join(", ") : "");
+  try { await enfileirar(db, p.id, "pago", { env }); } catch (e) { console.error("e-mail de pagamento não enfileirado", e); }
   return { ok: true, revisao: motivos };
 }
 
@@ -177,13 +183,13 @@ const PROXIMOS = {
   cancelado: [], reembolsado: [],
 };
 
-export async function mudarStatus(db, id, novo, { rastreio = "" } = {}) {
+export async function mudarStatus(db, id, novo, { rastreio = "", env } = {}) {
   const p = await db.prepare("SELECT * FROM pedidos WHERE id = ?").bind(id).first();
   if (!p) throw new ErroNegocio("Pedido não encontrado.", "pedido");
   if (!(PROXIMOS[p.status] || []).includes(novo)) throw new ErroNegocio(`Não dá para mudar de “${STATUS_TEXTO[p.status]}” para “${STATUS_TEXTO[novo] ?? novo}”.`, "transicao");
 
   if (novo === "cancelado") {
-    await cancelarPedido(db, id, "Cancelado pelo painel", { somenteAguardando: false, devolverEstoque: p.status !== "enviado" });
+    await cancelarPedido(db, id, "Cancelado pelo painel", { somenteAguardando: false, devolverEstoque: p.status !== "enviado", env });
     return;
   }
   if (novo === "enviado") {
@@ -191,11 +197,13 @@ export async function mudarStatus(db, id, novo, { rastreio = "" } = {}) {
     if (!/^[A-Z0-9]{8,30}$/.test(cod)) throw new ErroNegocio("Informe o código de rastreio (8 a 30 letras e números, sem espaços).", "rastreio");
     await db.prepare("UPDATE pedidos SET status = 'enviado', rastreio = ?, enviado_em = datetime('now'), atualizado_em = datetime('now') WHERE id = ?").bind(cod, id).run();
     await evento(db, id, "enviado", cod);
+    try { await enfileirar(db, id, "enviado", { env }); } catch (e) { console.error("e-mail de envio não enfileirado", e); }
     return;
   }
   const col = novo === "entregue" ? ", entregue_em = datetime('now')" : "";
   await db.prepare(`UPDATE pedidos SET status = ?${col}, atualizado_em = datetime('now') WHERE id = ?`).bind(novo, id).run();
   await evento(db, id, novo);
+  if (novo === "entregue" || novo === "reembolsado") { try { await enfileirar(db, id, novo, { env }); } catch (e) { console.error(e); } }
 }
 
 /* ---------- visão pública (sem dados sensíveis) ---------- */

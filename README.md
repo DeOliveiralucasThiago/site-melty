@@ -33,13 +33,23 @@ Fluxo: carrinho → `checkout.html` (dados, endereço, cupom) → `POST /api/ped
   o formato do pagamento (inclui CPF do pagador?) e qual API usar (Preferences x Orders). Sem provedor, a loja mantém o botão de WhatsApp.
 - Frete: valor fixo provisório (Painel > Textos e contato) até o cálculo por CEP da Fase 4.
 
+## E-mails automáticos (Fase 5)
+Cada mudança do pedido grava um e-mail numa **fila** (`emails`) e o envio acontece em seguida, com nova tentativa se falhar (a cada 5 min, até 5 vezes;
+e-mail com mais de 1 dia é descartado). Uma falha de e-mail nunca derruba o pedido. Cada tipo sai **uma vez por pedido**.
+Tipos: recebido, pago, enviado (com rastreio), entregue, cancelado, expirado e reembolsado. Em produção ("em produção") não há e-mail.
+Os e-mails não levam CPF nem endereço completo. No painel (Pedidos > detalhe) dá para ver, pré-visualizar e reenviar.
+- `EMAIL_PROVEDOR=teste`: não envia, só marca "simulado". `EMAIL_PROVEDOR=resend`: usa o Resend (precisa de `RESEND_API_KEY` como **segredo**,
+  `EMAIL_REMETENTE`, ex.: `Melty <pedidos@mail.meltyvelas.com.br>`, e um **domínio verificado** no Resend com registros SPF/DKIM). O plano gratuito
+  do Resend tem 3.000 e-mails/mês e 100/dia (conferir na página de preços). O adaptador segue a documentação pública, mas **ainda não foi testado com chave real**.
+- `SITE_URL` (opcional): endereço do site para os links dos e-mails; se faltar, usa o endereço em que o pedido foi feito.
+
 ## Rodar no computador (teste)
 ```bash
 npm install
 cp .dev.vars.example .dev.vars      # edite a senha e o segredo
 npm run db:local                    # cria o banco local e carrega os dados iniciais
 npm run dev                         # http://localhost:8788  (painel em /admin/)
-npx wrangler pages dev --port 8788 --binding PAGAMENTO_PROVEDOR=teste   # com pagamento simulado
+npx wrangler pages dev --port 8788 --binding PAGAMENTO_PROVEDOR=teste --binding EMAIL_PROVEDOR=teste   # pagamento e e-mails simulados
 npm test                            # testes do limpador de texto e do motor de preços/cupons (zera o banco local)
 ```
 

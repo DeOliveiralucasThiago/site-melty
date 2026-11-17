@@ -5,10 +5,11 @@ import { sanitizarDescricao } from "../_lib/html.js";
 import { precoVigente } from "../_lib/precos.js";
 import { provedor } from "../_lib/pagamento.js";
 import { liberarVencidos } from "../_lib/pedidos.js";
+import { processarFila } from "../_lib/email.js";
 
-export async function onRequestGet({ env }) {
+export async function onRequestGet({ env, waitUntil }) {
   const db = env.DB;
-  try { await liberarVencidos(db); } catch { /* a vitrine não pode cair por causa disso */ }
+  try { await liberarVencidos(db, env); waitUntil(processarFila(env).catch(() => {})); } catch { /* a vitrine não pode cair por causa disso */ }
   const [cfg, cats, prods, bans] = await Promise.all([
     db.prepare("SELECT chave, valor FROM config").all(),
     db.prepare("SELECT id, nome, descricao FROM categorias WHERE ativa = 1 ORDER BY ordem, nome").all(),
