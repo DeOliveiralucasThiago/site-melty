@@ -169,3 +169,13 @@ footer .copy{border-top:1px solid rgba(255,255,255,.15);margin-top:26px;padding-
 .thumbs button{width:64px;height:64px;padding:0;border:1.5px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;cursor:pointer}
 .thumbs button:hover,.thumbs button:focus-visible{border-color:var(--brand)}
 .thumbs img{width:100%;height:100%;object-fit:cover;border:0;border-radius:0}
+
+/* Cores da marca para destaques na descrição (usadas no painel e na loja) */
+.cor-vinho{color:#B52141}
+.cor-rosa{color:#F2808A;font-weight:600}
+.marca-rosa{background:#FFD9D9;border-radius:4px;padding:0 3px}
+.desc{margin:12px 0}
+.desc p{margin:0 0 10px}
+.desc h3{font-family:var(--serif);font-weight:600;font-size:1.35rem;color:var(--brand-dark);margin:16px 0 4px}
+.desc ul,.desc ol{margin:0 0 10px;padding-left:22px}
+.desc a{color:var(--brand);text-decoration:underline}

@@ -1,6 +1,7 @@
 // Dados públicos da vitrine (o site lê tudo daqui).
 import { json } from "../_lib/util.js";
 import { urlImagem } from "../_lib/imagens.js";
+import { sanitizarDescricao } from "../_lib/html.js";
 
 export async function onRequestGet({ env }) {
   const db = env.DB;
@@ -23,7 +24,7 @@ export async function onRequestGet({ env }) {
   const produtos = prods.results.map((p) => {
     const imagens = JSON.parse(p.imagens).map(urlImagem);
     return {
-      id: p.id, nome: p.nome, descricao: p.descricao, preco: p.preco_centavos / 100, estoque: p.estoque,
+      id: p.id, nome: p.nome, descricao: sanitizarDescricao(p.descricao), preco: p.preco_centavos / 100, estoque: p.estoque,
       categoria: p.categoria_id, peso_kg: p.peso_kg, novidade: !!p.novidade, destaque: !!p.destaque,
       imagem: imagens[0] || "", imagens,
     };

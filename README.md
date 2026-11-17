@@ -8,7 +8,7 @@ Loja de velas aromáticas: site público + painel de administração, rodando no
 - `seed/` — dados iniciais (as 11 velas, categoria, banner provisório e textos) e o gerador do `seed.sql`.
 
 ## O que o painel controla (`/admin/`)
-Produtos (preço, estoque, descrição, fotos, categoria, "novidade" e "mais vendida"), categorias (viram menu),
+Produtos (preço, estoque, descrição com formatação — negrito, itálico, listas, subtítulo, link e as cores da marca —, fotos, categoria, "novidade" e "mais vendida"), categorias (viram menu),
 banners do carrossel, textos e contato, benefícios, "Quem somos" e depoimentos. As fotos são reduzidas no
 navegador e guardadas no próprio banco (sem serviço extra, sem cartão cadastrado).
 
@@ -37,6 +37,7 @@ npm run dev                         # http://localhost:8788  (painel em /admin/)
 - Senha única guardada como segredo (nunca no código); sessão em cookie assinado, `HttpOnly`, `SameSite=Strict`, 12 h.
 - Bloqueio de 15 min após 5 senhas erradas seguidas.
 - Alterações exigem cabeçalho próprio e mesma origem (contra requisições forjadas).
+- Descrições passam por uma limpeza no servidor (`functions/_lib/html.js`): só formatações permitidas e as cores exatas da marca; scripts, estilos e links que não sejam https são removidos.
 - Fotos validadas pelo conteúdo (JPG/PNG/WebP, até 1 MB); SVG é recusado.
 - Painel com política de conteúdo restrita (`public/_headers`).
 

@@ -1,11 +1,16 @@
 import { json, erro, lerJson, idUnico } from "../../../_lib/util.js";
 import * as v from "../../../_lib/validar.js";
 import { todasExistem } from "../../../_lib/imagens.js";
+import { sanitizarDescricao } from "../../../_lib/html.js";
 
 export async function lerProduto(db, c, { parcial = false } = {}) {
   const o = {};
   if (!parcial || "nome" in c) o.nome = v.texto(c.nome, "Nome", { max: 80, obrigatorio: true });
-  if (!parcial || "descricao" in c) o.descricao = v.texto(c.descricao, "Descrição", { max: 2000 });
+  if (!parcial || "descricao" in c) {
+    const limpa = sanitizarDescricao(v.texto(c.descricao, "Descrição", { max: 20000 }));
+    if (limpa.length > 6000) throw new Error("Descrição: texto longo demais. Reduza um pouco.");
+    o.descricao = limpa;
+  }
   if (!parcial || "preco" in c) o.preco_centavos = v.centavos(c.preco, "Preço");
   if (!parcial || "estoque" in c) o.estoque = v.inteiro(c.estoque, "Estoque", 0, 9999);
   if (!parcial || "peso_kg" in c) o.peso_kg = v.decimal(c.peso_kg ?? 0.42, "Peso (kg)", 0.01, 30);
@@ -26,7 +31,7 @@ export async function lerProduto(db, c, { parcial = false } = {}) {
 }
 
 export function paraPainel(p) {
-  return { id: p.id, nome: p.nome, descricao: p.descricao, preco: p.preco_centavos / 100, estoque: p.estoque, categoria: p.categoria_id,
+  return { id: p.id, nome: p.nome, descricao: sanitizarDescricao(p.descricao), preco: p.preco_centavos / 100, estoque: p.estoque, categoria: p.categoria_id,
     peso_kg: p.peso_kg, imagens: JSON.parse(p.imagens), novidade: !!p.novidade, destaque: !!p.destaque, ativo: !!p.ativo, ordem: p.ordem };
 }
 

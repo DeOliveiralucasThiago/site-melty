@@ -229,7 +229,7 @@
       (k ? '<a href="catalogo.html?cat=' + encodeURIComponent(k.id) + '">' + esc(k.nome) + "</a> / " : "") + esc(p.nome) + "</p>" +
       "<h1>" + esc(p.nome) + '</h1><div class="price">' + brl.format(p.preco) + "</div>" +
       '<p class="small muted">' + estoqueTxt + "</p>" +
-      "<p>" + esc(p.descricao) + "</p>" +
+      '<div class="desc">' + p.descricao + "</div>" +
       '<div class="qty"><button id="menos" aria-label="Diminuir">−</button><span id="q">1</span><button id="mais" aria-label="Aumentar">+</button></div>' +
       '<button class="btn" id="add"' + (esgotado ? " disabled" : "") + ">" + (esgotado ? "Esgotado" : "Adicionar ao carrinho") + "</button>" +
       '<p id="msg" class="small" role="status"></p>' +

@@ -100,6 +100,83 @@
     return h("span", null, botao, entrada);
   }
 
+
+  /* ---------- editor de texto com formatação limitada ---------- */
+  function escHtml(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function editorTexto(htmlInicial) {
+    var area = h("div", { class: "editor", contenteditable: "true", role: "textbox", "aria-multiline": "true", "aria-label": "Descrição" });
+    area.innerHTML = htmlInicial || "<p><br></p>"; // vem do servidor já limpo
+    try { document.execCommand("defaultParagraphSeparator", false, "p"); document.execCommand("styleWithCSS", false, false); } catch (e) { /* ignora */ }
+
+    function dentro() { var s = window.getSelection(); return s.rangeCount && area.contains(s.getRangeAt(0).commonAncestorContainer) ? s : null; }
+    function cmd(nome, valor) { area.focus(); document.execCommand(nome, false, valor || null); }
+    // Cores da marca. Usa classes (sem estilos inline, que o painel bloqueia por segurança) e preserva negrito/itálico.
+    var TEXTO = ["cor-vinho", "cor-rosa"], FUNDO = ["marca-rosa"], TODAS = TEXTO.concat(FUNDO);
+    function nosDoTrecho(r) {
+      // separa os textos das pontas, para colorir só o que foi selecionado
+      if (r.endContainer.nodeType === 3 && r.endOffset < r.endContainer.length) r.endContainer.splitText(r.endOffset);
+      if (r.startContainer.nodeType === 3 && r.startOffset > 0) r.setStart(r.startContainer.splitText(r.startOffset), 0);
+      var raiz = r.commonAncestorContainer.nodeType === 3 ? r.commonAncestorContainer.parentNode : r.commonAncestorContainer;
+      var w = document.createTreeWalker(raiz, NodeFilter.SHOW_TEXT), nos = [], n;
+      while ((n = w.nextNode())) if (n.nodeValue.trim() !== "" || nos.length) { if (r.intersectsNode(n)) nos.push(n); }
+      return nos.filter(function (x) { return x.nodeValue !== ""; });
+    }
+    function marcar(classe) {
+      var sel = dentro();
+      if (!sel || sel.isCollapsed) { aviso("Selecione primeiro o trecho do texto.", "erro"); return; }
+      area.focus();
+      var nos = nosDoTrecho(sel.getRangeAt(0));
+      if (!nos.length) return;
+      nos.forEach(function (n) {
+        var pai = n.parentNode;
+        var span = pai.tagName === "SPAN" && pai.childNodes.length === 1 && TODAS.some(function (c) { return pai.classList.contains(c); }) ? pai : null;
+        if (classe === null) { if (span) TODAS.forEach(function (c) { span.classList.remove(c); }); return; }
+        if (!span) { span = document.createElement("span"); pai.insertBefore(span, n); span.appendChild(n); }
+        (FUNDO.indexOf(classe) >= 0 ? FUNDO : TEXTO).forEach(function (c) { span.classList.remove(c); });
+        span.classList.add(classe);
+      });
+      Array.prototype.slice.call(area.querySelectorAll("span")).forEach(function (sp) {
+        if (!sp.className) { while (sp.firstChild) sp.parentNode.insertBefore(sp.firstChild, sp); sp.parentNode.removeChild(sp); }
+      });
+      var nr = document.createRange(); nr.setStartBefore(nos[0]); nr.setEndAfter(nos[nos.length - 1]);
+      sel.removeAllRanges(); sel.addRange(nr);
+    }
+    function botao(rotulo, titulo, fn, extra) {
+      return h("button", { type: "button", title: titulo, "aria-label": titulo, class: extra || "", onmousedown: function (e) { e.preventDefault(); }, onclick: fn }, rotulo);
+    }
+    var barra = h("div", { class: "barra-fmt", role: "toolbar", "aria-label": "Formatação" },
+      botao(h("b", null, "N"), "Negrito", function () { cmd("bold"); }),
+      botao(h("i", null, "I"), "Itálico", function () { cmd("italic"); }),
+      botao("Subtítulo", "Transformar em subtítulo (ou voltar a parágrafo)", function () { cmd("formatBlock", document.queryCommandValue("formatBlock") === "h3" ? "p" : "h3"); }),
+      botao("• Lista", "Lista com marcadores", function () { cmd("insertUnorderedList"); }),
+      botao("1. Lista", "Lista numerada", function () { cmd("insertOrderedList"); }),
+      h("span", { class: "sep" }),
+      botao(h("span", { class: "cor-vinho" }, "Vinho"), "Texto na cor vinho", function () { marcar("cor-vinho"); }),
+      botao(h("span", { class: "cor-rosa" }, "Rosa"), "Texto na cor rosa", function () { marcar("cor-rosa"); }),
+      botao(h("span", { class: "marca-rosa" }, "Marca-texto"), "Fundo rosa claro, como um marca-texto", function () { marcar("marca-rosa"); }),
+      botao("Sem cor", "Tirar a cor do trecho selecionado", function () { marcar(null); }),
+      h("span", { class: "sep" }),
+      botao("Link", "Transformar o trecho selecionado em link", function () {
+        if (!dentro() || dentro().isCollapsed) { aviso("Selecione primeiro o texto que vai virar link.", "erro"); return; }
+        var url = prompt("Endereço do link (começa com https://):", "https://");
+        if (!url) return;
+        url = url.trim(); if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+        if (!/^https:\/\//i.test(url)) { aviso("Use um endereço seguro, que comece com https://", "erro"); return; }
+        cmd("createLink", url);
+      }),
+      botao("Sem link", "Tirar o link do trecho selecionado", function () { cmd("unlink"); }),
+      botao("Limpar", "Tirar toda a formatação do trecho selecionado", function () { cmd("removeFormat"); marcar(null); }));
+
+    // Colar sempre como texto simples (mantém os parágrafos), para não trazer fontes e cores de outros lugares
+    area.addEventListener("paste", function (e) {
+      e.preventDefault();
+      var t = (e.clipboardData || window.clipboardData).getData("text/plain").replace(/\r\n?/g, "\n").trim();
+      if (!t) return;
+      document.execCommand("insertHTML", false, t.split(/\n\s*\n/).map(function (b) { return "<p>" + escHtml(b).replace(/\n/g, "<br>") + "</p>"; }).join(""));
+    });
+    return { el: h("div", null, barra, area), obter: function () { return area.innerHTML; } };
+  }
+
   /* ---------- login ---------- */
   function telaLogin(mensagem) {
     limpar(raiz);
@@ -203,16 +280,15 @@
       nome: h("input", { type: "text", maxlength: "80", required: true, value: d.nome }),
       categoria: h("select", null, h("option", { value: "" }, "Sem categoria"),
         S.categorias.map(function (c) { return h("option", { value: c.id, selected: c.id === d.categoria }, c.nome); })),
-      preco: h("input", { type: "text", inputmode: "decimal", required: true, value: d.preco === "" ? "" : String(d.preco).replace(".", ","), placeholder: "79,90" }),
+      preco: h("input", { type: "text", inputmode: "decimal", required: true, value: d.preco === "" ? "" : Number(d.preco).toFixed(2).replace(".", ","), placeholder: "79,90" }),
       estoque: h("input", { type: "number", min: "0", max: "9999", required: true, value: d.estoque }),
       peso: h("input", { type: "text", inputmode: "decimal", value: String(d.peso_kg).replace(".", ",") }),
       ordem: h("input", { type: "number", min: "0", max: "9999", value: d.ordem }),
-      descricao: h("textarea", { maxlength: "2000" }, d.descricao),
       ativo: h("input", { type: "checkbox", checked: d.ativo }),
       novidade: h("input", { type: "checkbox", checked: d.novidade }),
       destaque: h("input", { type: "checkbox", checked: d.destaque })
     };
-    f.descricao.value = d.descricao;
+    var editor = editorTexto(d.descricao);
     var area = h("div", { class: "fotos" });
     function mostrarFotos() {
       limpar(area);
@@ -233,7 +309,7 @@
       ev.preventDefault();
       var corpo = {
         nome: f.nome.value, categoria: f.categoria.value || null, preco: lerReais(f.preco.value), estoque: Number(f.estoque.value),
-        peso_kg: lerReais(f.peso.value || "0,42"), ordem: Number(f.ordem.value || 0), descricao: f.descricao.value,
+        peso_kg: lerReais(f.peso.value || "0,42"), ordem: Number(f.ordem.value || 0), descricao: editor.obter(),
         ativo: f.ativo.checked, novidade: f.novidade.checked, destaque: f.destaque.checked, imagens: imagens
       };
       var salvar = novo ? api("POST", "/produtos", corpo) : api("PUT", "/produtos/" + encodeURIComponent(p.id), corpo);
@@ -243,7 +319,8 @@
       campo("Nome", f.nome),
       h("div", { class: "grade2" }, campo("Categoria", f.categoria), campo("Preço (R$)", f.preco)),
       h("div", { class: "grade3" }, campo("Estoque", f.estoque), campo("Peso (kg)", f.peso, "Com a embalagem, para o frete."), campo("Posição na loja", f.ordem, "Menor número aparece primeiro.")),
-      campo("Descrição", f.descricao),
+      h("label", null, "Descrição"), editor.el,
+      h("p", { class: "dica" }, "Selecione um trecho e use os botões para formatar. Cores disponíveis: as da marca. Fonte e tamanho seguem o padrão da loja."),
       h("label", null, "Fotos"), area,
       seletorFotos("+ Adicionar fotos", true, 1200, function (ids) { imagens = imagens.concat(ids).slice(0, 8); mostrarFotos(); }),
       h("p", { class: "dica" }, "Até 8 fotos. A primeira é a principal. Elas são reduzidas automaticamente."),
