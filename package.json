@@ -1,0 +1,14 @@
+{
+  "name": "site-melty",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Loja Melty: site estático + painel de administração (Cloudflare Pages Functions + D1)",
+  "scripts": {
+    "dev": "wrangler pages dev --port 8788",
+    "db:local": "wrangler d1 migrations apply melty --local && wrangler d1 execute melty --local --file seed/seed.sql",
+    "db:seed-gerar": "node scripts/gerar-seed.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^3.114.0"
+  }
+}

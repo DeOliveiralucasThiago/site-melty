@@ -1,0 +1,11 @@
+name = "site-melty"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "./public"
+
+# Banco de dados D1. O database_id abaixo é um marcador: ao criar o banco no
+# Cloudflare (npx wrangler d1 create melty), troque pelo id real.
+[[d1_databases]]
+binding = "DB"
+database_name = "melty"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"

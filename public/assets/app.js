@@ -27,16 +27,13 @@
   }
 
   /* ---------- dados ---------- */
-  function json(url, padrao) {
-    return fetch(url).then(function (r) { return r.json(); }).catch(function () { return padrao; });
-  }
+  var SEM_FOTO = "/assets/placeholder.svg";
+  function foto(p) { return p.imagem || SEM_FOTO; }
   function carregar() {
-    return Promise.all([
-      fetch("data/config.json").then(function (r) { return r.json(); }),
-      fetch("data/produtos.json").then(function (r) { return r.json(); }),
-      json("data/banners.json", []),
-      json("data/categorias.json", [])
-    ]).then(function (v) { return { config: v[0], produtos: v[1], banners: v[2], categorias: v[3] }; });
+    return fetch("/api/catalogo").then(function (r) {
+      if (!r.ok) throw new Error("catalogo");
+      return r.json();
+    });
   }
 
   /* ---------- ícones ---------- */
@@ -153,7 +150,7 @@
     if (esgotado) tag = '<span class="tag">Esgotado</span>';
     else if (p.estoque === 1) tag = '<span class="tag low">Última unidade</span>';
     return '<a class="card" href="produto.html?id=' + encodeURIComponent(p.id) + '">' +
-      '<div class="img"><img src="' + esc(p.imagem) + '" alt="' + esc(p.nome) + '" loading="lazy">' + tag + "</div>" +
+      '<div class="img"><img src="' + esc(foto(p)) + '" alt="' + esc(p.nome) + '" loading="lazy">' + tag + "</div>" +
       '<div class="info"><h3>' + esc(p.nome) + '</h3><span class="price">' + brl.format(p.preco) + "</span>" +
       '<span class="pill' + (esgotado ? " off" : "") + '">' + (esgotado ? "Esgotado" : "Ver vela") + "</span></div></a>";
   }
@@ -181,7 +178,7 @@
       secao("Nossas velas", "feitas com carinho", d.produtos);
     html += '<div class="wrap">' + avisoPrazo(c) + "</div>";
     if (qs) {
-      html += '<section class="about" id="quem-somos"><div class="wrap"><img src="' + esc(qs.imagem) + '" alt="" loading="lazy"><div><h2>' + esc(qs.titulo) + "</h2>" +
+      html += '<section class="about" id="quem-somos"><div class="wrap"><img src="' + esc(qs.imagem || SEM_FOTO) + '" alt="" loading="lazy"><div><h2>' + esc(qs.titulo) + "</h2>" +
         (qs.textos || []).map(function (t) { return "<p>" + esc(t) + "</p>"; }).join("") + "</div></div></section>";
     }
     if (dep.length) {
@@ -207,6 +204,12 @@
   }
 
   /* ---------- produto ---------- */
+  function miniaturas(p) {
+    if (!p.imagens || p.imagens.length < 2) return "";
+    return '<div class="thumbs">' + p.imagens.map(function (u, i) {
+      return '<button type="button" data-src="' + esc(u) + '" aria-label="Ver foto ' + (i + 1) + '"><img src="' + esc(u) + '" alt=""></button>';
+    }).join("") + "</div>";
+  }
   function paginaProduto(d) {
     var id = new URLSearchParams(location.search).get("id");
     var p = achar(d.produtos, id);
@@ -221,7 +224,7 @@
     var estoqueTxt = esgotado ? "Esgotado" : (p.estoque === 1 ? "Última unidade disponível" : p.estoque + " unidades disponíveis");
     app.innerHTML =
       '<div class="wrap"><div class="product">' +
-      '<div><img src="' + esc(p.imagem) + '" alt="' + esc(p.nome) + '"></div>' +
+      '<div><img id="fotoPrincipal" src="' + esc(foto(p)) + '" alt="' + esc(p.nome) + '">' + miniaturas(p) + "</div>" +
       '<div><p class="crumbs"><a href="index.html">Início</a> / ' +
       (k ? '<a href="catalogo.html?cat=' + encodeURIComponent(k.id) + '">' + esc(k.nome) + "</a> / " : "") + esc(p.nome) + "</p>" +
       "<h1>" + esc(p.nome) + '</h1><div class="price">' + brl.format(p.preco) + "</div>" +
@@ -232,6 +235,9 @@
       '<p id="msg" class="small" role="status"></p>' +
       avisoPrazo(d.config) +
       "</div></div></div>";
+    app.querySelectorAll(".thumbs button").forEach(function (b) {
+      b.onclick = function () { document.getElementById("fotoPrincipal").src = b.getAttribute("data-src"); };
+    });
     var q = 1;
     var qEl = document.getElementById("q");
     document.getElementById("menos").onclick = function () { q = Math.max(1, q - 1); qEl.textContent = q; };
@@ -266,7 +272,7 @@
         return;
       }
       var itens = linhas.map(function (l) {
-        return '<div class="cart-row"><img src="' + esc(l.p.imagem) + '" alt="">' +
+        return '<div class="cart-row"><img src="' + esc(foto(l.p)) + '" alt="">' +
           "<div><strong>" + esc(l.p.nome) + "</strong><br><span class='muted small'>" + brl.format(l.p.preco) + " cada</span>" +
           '<div class="qty"><button data-a="menos" data-id="' + esc(l.p.id) + '">−</button><span>' + l.n +
           '</span><button data-a="mais" data-id="' + esc(l.p.id) + '">+</button></div></div>' +

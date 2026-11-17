@@ -1,0 +1,453 @@
+/* Painel da loja Melty. Sem dependências. Todo texto é inserido com textContent (nunca innerHTML). */
+(function () {
+  "use strict";
+
+  var raiz = document.getElementById("raiz");
+  var S = { produtos: [], categorias: [], banners: [], config: {} };
+  var abaAtual = "produtos";
+
+  /* ---------- utilidades de interface ---------- */
+  function h(tag, attrs) {
+    var el = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      var v = attrs[k];
+      if (v === false || v === null || v === undefined) return;
+      if (k === "class") el.className = v;
+      else if (k.slice(0, 2) === "on") el.addEventListener(k.slice(2), v);
+      else if (k === "value" || k === "checked" || k === "disabled" || k === "selected") el[k] = v;
+      else el.setAttribute(k, v === true ? "" : v);
+    });
+    for (var i = 2; i < arguments.length; i++) filhos(el, arguments[i]);
+    return el;
+  }
+  function filhos(el, f) {
+    if (f === null || f === undefined || f === false) return;
+    if (Array.isArray(f)) f.forEach(function (x) { filhos(el, x); });
+    else el.appendChild(typeof f === "string" || typeof f === "number" ? document.createTextNode(String(f)) : f);
+  }
+  function limpar(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+
+  function aviso(texto, tipo) {
+    var box = document.getElementById("avisos");
+    var el = h("div", { class: "aviso " + (tipo || "") }, texto);
+    box.appendChild(el);
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, tipo === "erro" ? 6000 : 2500);
+  }
+
+  function reais(n) { return "R$ " + Number(n).toFixed(2).replace(".", ","); }
+  function lerReais(t) {
+    t = String(t).replace(/[R$\s]/g, "");
+    if (t.indexOf(",") >= 0) t = t.replace(/\./g, "").replace(",", ".");
+    return Number(t);
+  }
+  var foto = function (id) { return "/img/" + id; };
+
+  /* ---------- API ---------- */
+  function api(metodo, caminho, corpo) {
+    var opc = { method: metodo, credentials: "same-origin", headers: { "X-Requested-With": "melty" } };
+    if (corpo instanceof Blob) { opc.body = corpo; opc.headers["content-type"] = corpo.type; }
+    else if (corpo !== undefined) { opc.body = JSON.stringify(corpo); opc.headers["content-type"] = "application/json"; }
+    return fetch("/api/admin" + caminho, opc).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (dados) {
+        if (r.status === 401 && caminho !== "/login" && caminho !== "/sessao") { telaLogin("Sua sessão expirou. Entre novamente."); throw new Error("sessão"); }
+        if (!r.ok) throw new Error(dados.erro || "Algo deu errado. Tente de novo.");
+        return dados;
+      });
+    });
+  }
+  function acao(promessa, sucesso) {
+    return promessa.then(function (r) { if (sucesso) aviso(sucesso, "ok"); return r; })
+      .catch(function (e) { if (e.message !== "sessão") aviso(e.message, "erro"); throw e; });
+  }
+
+  /* ---------- fotos: reduz no navegador e envia ---------- */
+  function paraBlob(canvas, tipo, qualidade) {
+    return new Promise(function (ok) { canvas.toBlob(ok, tipo, qualidade); });
+  }
+  function enviarImagem(arquivo, maxLado) {
+    if (!/^image\/(jpeg|png|webp)$/.test(arquivo.type)) return Promise.reject(new Error("Use uma foto JPG, PNG ou WebP."));
+    return createImageBitmap(arquivo, { imageOrientation: "from-image" }).then(function (bmp) {
+      var escala = Math.min(1, maxLado / Math.max(bmp.width, bmp.height));
+      var c = document.createElement("canvas");
+      c.width = Math.round(bmp.width * escala); c.height = Math.round(bmp.height * escala);
+      c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+      return paraBlob(c, "image/webp", 0.82).then(function (b) {
+        if (!b || b.type !== "image/webp") return paraBlob(c, "image/jpeg", 0.85);
+        return b;
+      }).then(function (b) {
+        if (b.size > 950000) return paraBlob(c, b.type, 0.6);
+        return b;
+      });
+    }).then(function (blob) {
+      if (blob.size > 1000000) throw new Error("A foto ainda ficou grande demais. Tente uma foto menor.");
+      return api("POST", "/imagens", blob);
+    });
+  }
+  // Botão "escolher fotos" que devolve os ids enviados
+  function seletorFotos(rotulo, multiplo, maxLado, aoEnviar) {
+    var entrada = h("input", { type: "file", accept: "image/jpeg,image/png,image/webp", multiple: multiplo, hidden: true });
+    var botao = h("button", { type: "button", class: "btn sec mini", onclick: function () { entrada.click(); } }, rotulo);
+    entrada.addEventListener("change", function () {
+      var arquivos = Array.prototype.slice.call(entrada.files);
+      if (!arquivos.length) return;
+      botao.disabled = true; botao.textContent = "Enviando…";
+      arquivos.reduce(function (p, a) {
+        return p.then(function (ids) { return enviarImagem(a, maxLado).then(function (r) { return ids.concat(r.id); }); });
+      }, Promise.resolve([])).then(function (ids) { aoEnviar(ids); })
+        .catch(function (e) { if (e.message !== "sessão") aviso(e.message, "erro"); })
+        .then(function () { botao.disabled = false; botao.textContent = rotulo; entrada.value = ""; });
+    });
+    return h("span", null, botao, entrada);
+  }
+
+  /* ---------- login ---------- */
+  function telaLogin(mensagem) {
+    limpar(raiz);
+    var erro = h("p", { class: "erro", role: "alert" }, mensagem || "");
+    var senha = h("input", { type: "password", autocomplete: "current-password", required: true, id: "senha" });
+    raiz.appendChild(h("div", { class: "login" },
+      h("h1", null, "MELTY"), h("p", { class: "dica" }, "Painel da loja. Digite a senha para entrar."),
+      h("form", { onsubmit: function (ev) {
+        ev.preventDefault();
+        api("POST", "/login", { senha: senha.value }).then(iniciar).catch(function (e) { erro.textContent = e.message; senha.select(); });
+      } }, h("label", { for: "senha" }, "Senha"), senha, erro, h("button", { class: "btn", type: "submit" }, "Entrar"))));
+    senha.focus();
+  }
+
+  /* ---------- estrutura geral ---------- */
+  var ABAS = [["produtos", "Produtos"], ["categorias", "Categorias"], ["banners", "Banners"], ["textos", "Textos e contato"]];
+
+  function carregarTudo() {
+    return Promise.all([api("GET", "/produtos"), api("GET", "/categorias"), api("GET", "/banners"), api("GET", "/config")]).then(function (v) {
+      S.produtos = v[0]; S.categorias = v[1]; S.banners = v[2]; S.config = v[3];
+    });
+  }
+
+  function iniciar() {
+    carregarTudo().then(desenhar).catch(function (e) { if (e.message !== "sessão") telaLogin(e.message); });
+  }
+
+  function desenhar() {
+    limpar(raiz);
+    var main = h("main");
+    raiz.appendChild(h("div", { class: "topo" }, h("b", null, "MELTY · PAINEL"),
+      h("span", null, h("a", { href: "/", target: "_blank", rel: "noopener" }, "Ver a loja"),
+        h("button", { type: "button", onclick: function () { api("POST", "/logout").then(function () { telaLogin(); }); } }, "Sair"))));
+    raiz.appendChild(h("div", { class: "abas", role: "tablist" }, ABAS.map(function (a) {
+      return h("button", { role: "tab", "aria-selected": abaAtual === a[0] ? "true" : "false", onclick: function () { abaAtual = a[0]; desenhar(); } }, a[1]);
+    })));
+    raiz.appendChild(main);
+    ({ produtos: abaProdutos, categorias: abaCategorias, banners: abaBanners, textos: abaTextos })[abaAtual](main);
+  }
+  function recarregar() { return carregarTudo().then(desenhar); }
+
+  function nomeCategoria(id) {
+    var c = S.categorias.filter(function (x) { return x.id === id; })[0];
+    return c ? c.nome : "Sem categoria";
+  }
+
+  /* ========== PRODUTOS ========== */
+  function abaProdutos(main) {
+    var busca = h("input", { type: "text", placeholder: "Buscar produto…", "aria-label": "Buscar produto" });
+    var lista = h("div");
+    function filtrar() {
+      limpar(lista);
+      var t = busca.value.trim().toLowerCase();
+      var itens = S.produtos.filter(function (p) { return !t || p.nome.toLowerCase().indexOf(t) >= 0; });
+      if (!itens.length) lista.appendChild(h("p", { class: "vazio" }, S.produtos.length ? "Nenhum produto encontrado." : "Ainda não há produtos. Clique em “Novo produto”."));
+      itens.forEach(function (p) { lista.appendChild(linhaProduto(p)); });
+    }
+    busca.addEventListener("input", filtrar);
+    main.appendChild(h("h1", null, "Produtos"));
+    main.appendChild(h("p", { class: "dica" }, "Altere o estoque direto na lista. Para mudar preço, fotos ou descrição, clique em Editar."));
+    main.appendChild(h("div", { class: "barra" }, h("div", { class: "espaco" }, busca),
+      h("button", { class: "btn", onclick: function () { formProduto(null); } }, "+ Novo produto")));
+    main.appendChild(lista);
+    filtrar();
+  }
+
+  function linhaProduto(p) {
+    function salvarEstoque(valor) {
+      valor = Math.max(0, Math.min(9999, parseInt(valor, 10) || 0));
+      acao(api("PATCH", "/produtos/" + encodeURIComponent(p.id), { estoque: valor }), "Estoque atualizado.").then(function (r) {
+        p.estoque = r.estoque; entrada.value = r.estoque; etiquetas();
+      }).catch(function () { entrada.value = p.estoque; });
+    }
+    var entrada = h("input", { type: "number", min: "0", max: "9999", value: p.estoque, "aria-label": "Estoque de " + p.nome,
+      onchange: function () { salvarEstoque(entrada.value); } });
+    var etq = h("span");
+    function etiquetas() {
+      limpar(etq);
+      if (!p.ativo) etq.appendChild(h("span", { class: "etq cinza" }, "Oculto"));
+      if (p.estoque === 0) etq.appendChild(h("span", { class: "etq vermelha" }, "Esgotado"));
+      if (p.novidade) etq.appendChild(h("span", { class: "etq" }, "Novidade"));
+      if (p.destaque) etq.appendChild(h("span", { class: "etq" }, "Mais vendida"));
+    }
+    etiquetas();
+    return h("div", { class: "cartao" }, h("div", { class: "linha" },
+      p.imagens.length ? h("img", { src: foto(p.imagens[0]), alt: "" }) : h("div", { class: "miniatura" }),
+      h("div", null, h("div", { class: "nome" }, p.nome, etq), h("div", { class: "meta" }, reais(p.preco) + " · " + nomeCategoria(p.categoria))),
+      h("div", { class: "acoes extra" },
+        h("div", { class: "estoque" }, h("span", { class: "meta" }, "Estoque"),
+          h("button", { type: "button", "aria-label": "Diminuir estoque", onclick: function () { salvarEstoque(p.estoque - 1); } }, "−"), entrada,
+          h("button", { type: "button", "aria-label": "Aumentar estoque", onclick: function () { salvarEstoque(p.estoque + 1); } }, "+")),
+        h("button", { class: "btn sec mini", onclick: function () { formProduto(p); } }, "Editar"))));
+  }
+
+  function formProduto(p) {
+    var novo = !p;
+    var d = p || { nome: "", descricao: "", preco: "", estoque: 1, categoria: S.categorias.length ? S.categorias[0].id : "", peso_kg: 0.42, imagens: [], novidade: false, destaque: false, ativo: true, ordem: S.produtos.length };
+    var imagens = d.imagens.slice();
+    var dlg = h("dialog");
+    var f = {
+      nome: h("input", { type: "text", maxlength: "80", required: true, value: d.nome }),
+      categoria: h("select", null, h("option", { value: "" }, "Sem categoria"),
+        S.categorias.map(function (c) { return h("option", { value: c.id, selected: c.id === d.categoria }, c.nome); })),
+      preco: h("input", { type: "text", inputmode: "decimal", required: true, value: d.preco === "" ? "" : String(d.preco).replace(".", ","), placeholder: "79,90" }),
+      estoque: h("input", { type: "number", min: "0", max: "9999", required: true, value: d.estoque }),
+      peso: h("input", { type: "text", inputmode: "decimal", value: String(d.peso_kg).replace(".", ",") }),
+      ordem: h("input", { type: "number", min: "0", max: "9999", value: d.ordem }),
+      descricao: h("textarea", { maxlength: "2000" }, d.descricao),
+      ativo: h("input", { type: "checkbox", checked: d.ativo }),
+      novidade: h("input", { type: "checkbox", checked: d.novidade }),
+      destaque: h("input", { type: "checkbox", checked: d.destaque })
+    };
+    f.descricao.value = d.descricao;
+    var area = h("div", { class: "fotos" });
+    function mostrarFotos() {
+      limpar(area);
+      imagens.forEach(function (id, i) {
+        area.appendChild(h("div", { class: "foto" }, h("img", { src: foto(id), alt: "Foto " + (i + 1) }),
+          i === 0 ? h("span", { class: "principal" }, "Principal") : null,
+          h("div", null,
+            h("button", { type: "button", "aria-label": "Mover para antes", disabled: i === 0, onclick: function () { imagens.splice(i - 1, 0, imagens.splice(i, 1)[0]); mostrarFotos(); } }, "←"),
+            h("button", { type: "button", "aria-label": "Mover para depois", disabled: i === imagens.length - 1, onclick: function () { imagens.splice(i + 1, 0, imagens.splice(i, 1)[0]); mostrarFotos(); } }, "→"),
+            h("button", { type: "button", "aria-label": "Remover foto", onclick: function () { imagens.splice(i, 1); mostrarFotos(); } }, "✕"))));
+      });
+      if (!imagens.length) area.appendChild(h("p", { class: "dica" }, "Nenhuma foto ainda."));
+    }
+    mostrarFotos();
+
+    function campo(rotulo, el, dica) { return h("div", null, h("label", null, rotulo), el, dica ? h("p", { class: "dica" }, dica) : null); }
+    var form = h("form", { method: "dialog", onsubmit: function (ev) {
+      ev.preventDefault();
+      var corpo = {
+        nome: f.nome.value, categoria: f.categoria.value || null, preco: lerReais(f.preco.value), estoque: Number(f.estoque.value),
+        peso_kg: lerReais(f.peso.value || "0,42"), ordem: Number(f.ordem.value || 0), descricao: f.descricao.value,
+        ativo: f.ativo.checked, novidade: f.novidade.checked, destaque: f.destaque.checked, imagens: imagens
+      };
+      var salvar = novo ? api("POST", "/produtos", corpo) : api("PUT", "/produtos/" + encodeURIComponent(p.id), corpo);
+      acao(salvar, "Produto salvo.").then(function () { dlg.close(); return recarregar(); }).catch(function () {});
+    } },
+      h("h2", null, novo ? "Novo produto" : "Editar produto"),
+      campo("Nome", f.nome),
+      h("div", { class: "grade2" }, campo("Categoria", f.categoria), campo("Preço (R$)", f.preco)),
+      h("div", { class: "grade3" }, campo("Estoque", f.estoque), campo("Peso (kg)", f.peso, "Com a embalagem, para o frete."), campo("Posição na loja", f.ordem, "Menor número aparece primeiro.")),
+      campo("Descrição", f.descricao),
+      h("label", null, "Fotos"), area,
+      seletorFotos("+ Adicionar fotos", true, 1200, function (ids) { imagens = imagens.concat(ids).slice(0, 8); mostrarFotos(); }),
+      h("p", { class: "dica" }, "Até 8 fotos. A primeira é a principal. Elas são reduzidas automaticamente."),
+      h("label", { class: "chk" }, f.ativo, "Aparece na loja"),
+      h("label", { class: "chk" }, f.novidade, "Mostrar na seção “Novidades”"),
+      h("label", { class: "chk" }, f.destaque, "Mostrar na seção “Mais vendidas”"),
+      h("div", { class: "barra" },
+        h("button", { class: "btn", type: "submit" }, "Salvar"),
+        h("button", { class: "btn sec", type: "button", onclick: function () { dlg.close(); } }, "Cancelar"),
+        h("span", { class: "espaco" }),
+        novo ? null : h("button", { class: "btn perigo", type: "button", onclick: function () {
+          if (!confirm("Excluir “" + p.nome + "” de vez? Isso não pode ser desfeito.\n\nDica: para só esconder da loja, desmarque “Aparece na loja”.")) return;
+          acao(api("DELETE", "/produtos/" + encodeURIComponent(p.id)), "Produto excluído.").then(function () { dlg.close(); return recarregar(); }).catch(function () {});
+        } }, "Excluir")));
+    dlg.appendChild(form);
+    dlg.addEventListener("close", function () { if (dlg.parentNode) dlg.parentNode.removeChild(dlg); });
+    document.body.appendChild(dlg);
+    dlg.showModal();
+    f.nome.focus();
+  }
+
+  /* ========== CATEGORIAS ========== */
+  function renumerar(lista, rota) {
+    return Promise.all(lista.map(function (x, i) {
+      if (x.ordem === i) return null;
+      x.ordem = i;
+      return api("PATCH", rota + encodeURIComponent(x.id), { ordem: i });
+    }));
+  }
+  function mover(lista, i, delta, rota) {
+    var j = i + delta;
+    if (j < 0 || j >= lista.length) return;
+    lista.splice(j, 0, lista.splice(i, 1)[0]);
+    acao(renumerar(lista, rota)).then(recarregar).catch(function () {});
+  }
+
+  function abaCategorias(main) {
+    var nome = h("input", { type: "text", maxlength: "40", placeholder: "Ex.: Home Spray", "aria-label": "Nome da nova categoria" });
+    main.appendChild(h("h1", null, "Categorias"));
+    main.appendChild(h("p", { class: "dica" }, "Cada categoria visível e com produtos aparece sozinha no menu da loja."));
+    main.appendChild(h("form", { class: "barra", onsubmit: function (ev) {
+      ev.preventDefault();
+      acao(api("POST", "/categorias", { nome: nome.value }), "Categoria criada.").then(recarregar).catch(function () {});
+    } }, h("div", { class: "espaco" }, nome), h("button", { class: "btn", type: "submit" }, "+ Nova categoria")));
+
+    if (!S.categorias.length) main.appendChild(h("p", { class: "vazio" }, "Nenhuma categoria ainda."));
+    S.categorias.forEach(function (c, i) {
+      var n = h("input", { type: "text", maxlength: "40", value: c.nome, "aria-label": "Nome" });
+      var desc = h("input", { type: "text", maxlength: "200", value: c.descricao, "aria-label": "Descrição" });
+      var ativa = h("input", { type: "checkbox", checked: c.ativa });
+      main.appendChild(h("div", { class: "cartao" },
+        h("div", { class: "grade2" }, h("div", null, h("label", null, "Nome"), n), h("div", null, h("label", null, "Descrição curta"), desc)),
+        h("label", { class: "chk" }, ativa, "Visível na loja e no menu"),
+        h("div", { class: "barra" },
+          h("span", { class: "meta dica" }, c.total + (c.total === 1 ? " produto" : " produtos")), h("span", { class: "espaco" }),
+          h("button", { class: "btn sec mini", type: "button", disabled: i === 0, onclick: function () { mover(S.categorias, i, -1, "/categorias/"); } }, "↑ Subir"),
+          h("button", { class: "btn sec mini", type: "button", disabled: i === S.categorias.length - 1, onclick: function () { mover(S.categorias, i, 1, "/categorias/"); } }, "↓ Descer"),
+          h("button", { class: "btn mini", type: "button", onclick: function () {
+            acao(api("PATCH", "/categorias/" + encodeURIComponent(c.id), { nome: n.value, descricao: desc.value, ativa: ativa.checked }), "Categoria salva.").then(recarregar).catch(function () {});
+          } }, "Salvar"),
+          h("button", { class: "btn perigo mini", type: "button", onclick: function () {
+            if (!confirm("Excluir a categoria “" + c.nome + "”?")) return;
+            acao(api("DELETE", "/categorias/" + encodeURIComponent(c.id)), "Categoria excluída.").then(recarregar).catch(function () {});
+          } }, "Excluir"))));
+    });
+  }
+
+  /* ========== BANNERS ========== */
+  function abaBanners(main) {
+    main.appendChild(h("h1", null, "Banners"));
+    main.appendChild(h("p", { class: "dica" }, "Faixa de imagens no topo da página inicial. Com 2 ou mais banners visíveis, vira um carrossel. Tamanho ideal: 2000 × 530 pixels (faixa larga). No celular, as bordas podem ser cortadas, então deixe o assunto principal no centro."));
+    main.appendChild(h("div", { class: "barra" }, seletorFotos("+ Novo banner", false, 2000, function (ids) {
+      acao(api("POST", "/banners", { imagem_id: ids[0] }), "Banner criado. Preencha os textos, se quiser.").then(recarregar).catch(function () {});
+    })));
+    if (!S.banners.length) main.appendChild(h("p", { class: "vazio" }, "Nenhum banner ainda."));
+    S.banners.forEach(function (b, i) {
+      var f = {
+        titulo: h("input", { type: "text", maxlength: "80", value: b.titulo, placeholder: "Opcional" }),
+        botao: h("input", { type: "text", maxlength: "30", value: b.botao, placeholder: "Opcional. Ex.: Ver velas" }),
+        link: h("input", { type: "text", maxlength: "300", value: b.link, placeholder: "Opcional. Ex.: catalogo.html" }),
+        alt: h("input", { type: "text", maxlength: "200", value: b.alt, placeholder: "Descreva a imagem (ajuda quem usa leitor de tela)" }),
+        ativo: h("input", { type: "checkbox", checked: b.ativo })
+      };
+      var img = h("img", { class: "banner-prev", src: foto(b.imagem_id), alt: "Banner " + (i + 1) });
+      main.appendChild(h("div", { class: "cartao" }, img,
+        h("div", { class: "grade2" }, h("div", null, h("label", null, "Título sobre a imagem"), f.titulo), h("div", null, h("label", null, "Texto do botão"), f.botao)),
+        h("div", { class: "grade2" }, h("div", null, h("label", null, "Link ao clicar"), f.link), h("div", null, h("label", null, "Descrição da imagem"), f.alt)),
+        h("label", { class: "chk" }, f.ativo, "Visível na loja"),
+        h("div", { class: "barra" },
+          seletorFotos("Trocar imagem", false, 2000, function (ids) {
+            acao(api("PATCH", "/banners/" + b.id, { imagem_id: ids[0] }), "Imagem trocada.").then(recarregar).catch(function () {});
+          }),
+          h("span", { class: "espaco" }),
+          h("button", { class: "btn sec mini", type: "button", disabled: i === 0, onclick: function () { mover(S.banners, i, -1, "/banners/"); } }, "↑ Subir"),
+          h("button", { class: "btn sec mini", type: "button", disabled: i === S.banners.length - 1, onclick: function () { mover(S.banners, i, 1, "/banners/"); } }, "↓ Descer"),
+          h("button", { class: "btn mini", type: "button", onclick: function () {
+            acao(api("PATCH", "/banners/" + b.id, { titulo: f.titulo.value, botao: f.botao.value, link: f.link.value, alt: f.alt.value, ativo: f.ativo.checked }), "Banner salvo.").then(recarregar).catch(function () {});
+          } }, "Salvar"),
+          h("button", { class: "btn perigo mini", type: "button", onclick: function () {
+            if (!confirm("Excluir este banner?")) return;
+            acao(api("DELETE", "/banners/" + b.id), "Banner excluído.").then(recarregar).catch(function () {});
+          } }, "Excluir"))));
+    });
+  }
+
+  /* ========== TEXTOS E CONTATO ========== */
+  var ICONES = [["mao", "Coração"], ["cartao", "Cartão"], ["caixa", "Caixa"], ["zap", "Conversa"]];
+
+  function abaTextos(main) {
+    var c = S.config;
+    var qs = c.quem_somos || { titulo: "", textos: [], imagem_id: null };
+    var estado = { logo_id: c.logo_id || null, quem_imagem: qs.imagem_id || null, depoimentos: (c.depoimentos || []).map(function (d) { return { nome: d.nome, texto: d.texto }; }) };
+
+    var f = {
+      loja: h("input", { type: "text", maxlength: "40", value: c.loja || "" }),
+      slogan: h("input", { type: "text", maxlength: "80", value: c.slogan || "" }),
+      whatsapp: h("input", { type: "text", inputmode: "numeric", value: c.whatsapp || "" }),
+      instagram: h("input", { type: "text", maxlength: "30", value: c.instagram || "" }),
+      email: h("input", { type: "text", maxlength: "120", value: c.email || "" }),
+      dias: h("input", { type: "number", min: "0", max: "60", value: c.prazo_producao_dias_uteis }),
+      aviso: h("textarea", { maxlength: "400" }),
+      faixa: h("textarea", { maxlength: "520" }),
+      qsTitulo: h("input", { type: "text", maxlength: "60", value: qs.titulo || "" }),
+      qsTextos: h("textarea", { maxlength: "4000" })
+    };
+    f.aviso.value = c.aviso_prazo || "";
+    f.faixa.value = (c.faixa_avisos || []).join("\n");
+    f.qsTextos.value = (qs.textos || []).join("\n\n");
+
+    var ben = [0, 1, 2, 3].map(function (i) {
+      var b = (c.beneficios || [])[i] || { icone: ICONES[i][0], titulo: "", texto: "" };
+      return {
+        icone: h("select", { "aria-label": "Ícone" }, ICONES.map(function (x) { return h("option", { value: x[0], selected: x[0] === b.icone }, x[1]); })),
+        titulo: h("input", { type: "text", maxlength: "40", value: b.titulo, placeholder: "Título (deixe vazio para não mostrar)" }),
+        texto: h("input", { type: "text", maxlength: "80", value: b.texto, placeholder: "Texto curto" })
+      };
+    });
+
+    function blocoImagem(rotulo, pegar, definir, maxLado) {
+      var area = h("div", { class: "barra" });
+      function mostrar() {
+        limpar(area);
+        var id = pegar();
+        area.appendChild(id ? h("img", { class: "miniatura", src: foto(id), alt: "" }) : h("span", { class: "dica" }, "Sem imagem."));
+        area.appendChild(seletorFotos(id ? "Trocar" : "Escolher imagem", false, maxLado, function (ids) { definir(ids[0]); mostrar(); }));
+        if (id) area.appendChild(h("button", { class: "btn perigo mini", type: "button", onclick: function () { definir(null); mostrar(); } }, "Remover"));
+      }
+      mostrar();
+      return h("div", null, h("label", null, rotulo), area);
+    }
+
+    var depBox = h("div");
+    function mostrarDeps() {
+      limpar(depBox);
+      if (!estado.depoimentos.length) depBox.appendChild(h("p", { class: "dica" }, "Nenhum depoimento. A seção só aparece na loja quando houver pelo menos um."));
+      estado.depoimentos.forEach(function (d, i) {
+        var nome = h("input", { type: "text", maxlength: "40", value: d.nome, placeholder: "Nome do cliente", "aria-label": "Nome do cliente" });
+        var txt = h("textarea", { maxlength: "400", "aria-label": "Depoimento" }); txt.value = d.texto;
+        nome.addEventListener("input", function () { d.nome = nome.value; });
+        txt.addEventListener("input", function () { d.texto = txt.value; });
+        depBox.appendChild(h("div", { class: "cartao" }, nome, h("div", null, txt),
+          h("div", { class: "barra" }, h("button", { class: "btn perigo mini", type: "button", onclick: function () { estado.depoimentos.splice(i, 1); mostrarDeps(); } }, "Remover"))));
+      });
+    }
+    mostrarDeps();
+
+    function secao(titulo, dica) { return [h("h2", null, titulo), dica ? h("p", { class: "dica" }, dica) : null]; }
+    function campo(r, el, dica) { return h("div", null, h("label", null, r), el, dica ? h("p", { class: "dica" }, dica) : null); }
+
+    main.appendChild(h("h1", null, "Textos e contato"));
+    main.appendChild(h("form", { onsubmit: function (ev) {
+      ev.preventDefault();
+      var corpo = {
+        loja: f.loja.value, slogan: f.slogan.value, whatsapp: f.whatsapp.value, instagram: f.instagram.value, email: f.email.value,
+        prazo_producao_dias_uteis: Number(f.dias.value), aviso_prazo: f.aviso.value,
+        faixa_avisos: f.faixa.value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean),
+        beneficios: ben.filter(function (b) { return b.titulo.value.trim(); }).map(function (b) { return { icone: b.icone.value, titulo: b.titulo.value, texto: b.texto.value }; }),
+        quem_somos: { titulo: f.qsTitulo.value, textos: f.qsTextos.value.split(/\n\s*\n/).map(function (x) { return x.trim(); }).filter(Boolean), imagem_id: estado.quem_imagem },
+        depoimentos: estado.depoimentos.filter(function (d) { return d.nome.trim() || d.texto.trim(); }),
+        logo_id: estado.logo_id
+      };
+      acao(api("PUT", "/config", corpo), "Textos salvos.").then(recarregar).catch(function () {});
+    } },
+      secao("Marca"),
+      h("div", { class: "grade2" }, campo("Nome da loja", f.loja), campo("Frase da loja", f.slogan)),
+      blocoImagem("Logo (substitui o nome escrito no topo)", function () { return estado.logo_id; }, function (id) { estado.logo_id = id; }, 600),
+      secao("Contato"),
+      h("div", { class: "grade3" }, campo("WhatsApp", f.whatsapp, "Com 55 e DDD, só números."), campo("Instagram", f.instagram, "Só o usuário, sem @."), campo("E-mail", f.email)),
+      secao("Prazo de entrega"),
+      h("div", { class: "grade2" }, campo("Dias úteis de produção", f.dias, "Usado na página Prazos e Envio."), h("div")),
+      campo("Aviso de prazo", f.aviso, "Aparece na vitrine, no produto e no carrinho."),
+      secao("Faixa de avisos do topo", "Uma frase por linha (até 5). Se houver mais de uma, elas se alternam."),
+      f.faixa,
+      secao("Benefícios", "Os ícones abaixo da primeira imagem (até 4). Deixe o título vazio para esconder."),
+      ben.map(function (b) { return h("div", { class: "cartao" }, h("div", { class: "grade3" }, b.icone, b.titulo, b.texto)); }),
+      secao("Quem somos", "Separe os parágrafos com uma linha em branco."),
+      campo("Título", f.qsTitulo), campo("Texto", f.qsTextos),
+      blocoImagem("Foto", function () { return estado.quem_imagem; }, function (id) { estado.quem_imagem = id; }, 1000),
+      secao("Depoimentos", "Use só depoimentos reais de clientes."),
+      depBox,
+      h("button", { class: "btn sec mini", type: "button", onclick: function () { if (estado.depoimentos.length < 12) { estado.depoimentos.push({ nome: "", texto: "" }); mostrarDeps(); } } }, "+ Adicionar depoimento"),
+      h("div", { class: "barra" }, h("button", { class: "btn", type: "submit" }, "Salvar textos"))));
+  }
+
+  /* ---------- início ---------- */
+  api("GET", "/sessao").then(iniciar).catch(function (e) { if (e.message !== "sessão") telaLogin(); });
+})();

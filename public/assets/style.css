@@ -164,3 +164,8 @@ footer .copy{border-top:1px solid rgba(255,255,255,.15);margin-top:26px;padding-
 @media(prefers-reduced-motion:reduce){.banner .track,.card,.announce span{transition:none}}
 .benef>div{align-items:flex-start}
 @media(max-width:720px){.announce{font-size:.68rem;letter-spacing:.06em}.announce span{padding:0 8px}}
+
+.thumbs{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.thumbs button{width:64px;height:64px;padding:0;border:1.5px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;cursor:pointer}
+.thumbs button:hover,.thumbs button:focus-visible{border-color:var(--brand)}
+.thumbs img{width:100%;height:100%;object-fit:cover;border:0;border-radius:0}
