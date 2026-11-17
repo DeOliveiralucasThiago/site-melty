@@ -28,8 +28,9 @@
   function carregar() {
     return Promise.all([
       fetch("data/config.json").then(function (r) { return r.json(); }),
-      fetch("data/produtos.json").then(function (r) { return r.json(); })
-    ]).then(function (v) { return { config: v[0], produtos: v[1] }; });
+      fetch("data/produtos.json").then(function (r) { return r.json(); }),
+      fetch("data/banners.json").then(function (r) { return r.json(); }).catch(function () { return []; })
+    ]).then(function (v) { return { config: v[0], produtos: v[1], banners: v[2] }; });
   }
 
   /* ---------- layout comum ---------- */
@@ -69,11 +70,58 @@
       '<div class="info"><h3>' + esc(p.nome) + '</h3><span class="price">' + brl.format(p.preco) + "</span></div></a>";
   }
 
+  /* ---------- banner / carrossel ---------- */
+  function htmlBanner(banners) {
+    if (!banners || !banners.length) return "";
+    var slides = banners.map(function (b, i) {
+      var img = '<img src="' + esc(b.imagem) + '" alt="' + esc(b.alt || "") + '"' + (i ? ' loading="lazy"' : "") + ">";
+      var cap = b.legenda ? '<div class="cap">' + esc(b.legenda) + "</div>" : "";
+      return (b.link ? '<a class="slide" href="' + esc(b.link) + '">' : '<div class="slide">') + img + cap + (b.link ? "</a>" : "</div>");
+    }).join("");
+    var controles = "";
+    if (banners.length > 1) {
+      controles = '<button class="nav prev" aria-label="Banner anterior">‹</button><button class="nav next" aria-label="Próximo banner">›</button><div class="dots">' +
+        banners.map(function (_, i) { return '<button aria-label="Ir para o banner ' + (i + 1) + '"></button>'; }).join("") + "</div>";
+    }
+    return '<section class="banner" aria-roledescription="carrossel" aria-label="Destaques"><div class="track">' + slides + "</div>" + controles + "</section>";
+  }
+
+  function iniciarCarrossel(n) {
+    var el = document.querySelector(".banner");
+    if (!el || n < 2) return;
+    var track = el.querySelector(".track"), dots = el.querySelectorAll(".dots button");
+    var i = 0, timer = null;
+    function ir(k) {
+      i = (k + n) % n;
+      track.style.transform = "translateX(-" + (i * 100) + "%)";
+      dots.forEach(function (d, j) { d.setAttribute("aria-current", j === i ? "true" : "false"); });
+    }
+    function iniciar() {
+      parar();
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      timer = setInterval(function () { ir(i + 1); }, 5000);
+    }
+    function parar() { if (timer) { clearInterval(timer); timer = null; } }
+    el.querySelector(".prev").onclick = function () { ir(i - 1); iniciar(); };
+    el.querySelector(".next").onclick = function () { ir(i + 1); iniciar(); };
+    dots.forEach(function (d, j) { d.onclick = function () { ir(j); iniciar(); }; });
+    el.addEventListener("mouseenter", parar);
+    el.addEventListener("mouseleave", iniciar);
+    var x0 = null;
+    el.addEventListener("touchstart", function (e) { x0 = e.touches[0].clientX; parar(); }, { passive: true });
+    el.addEventListener("touchend", function (e) {
+      if (x0 !== null) { var dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 40) ir(i + (dx < 0 ? 1 : -1)); }
+      x0 = null; iniciar();
+    });
+    ir(0); iniciar();
+  }
+
   function paginaHome(d) {
-    document.getElementById("app").innerHTML =
+    document.getElementById("app").innerHTML = htmlBanner(d.banners) +
       '<div class="wrap"><section class="hero"><h1>' + esc(d.config.loja) + "</h1><p>" + esc(d.config.slogan) + "</p></section>" +
       avisoPrazo(d.config) +
       '<div class="grid">' + d.produtos.map(cardProduto).join("") + "</div></div>";
+    iniciarCarrossel((d.banners || []).length);
   }
 
   function paginaProduto(d) {
