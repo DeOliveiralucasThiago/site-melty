@@ -1,4 +1,4 @@
-/* Loja Melty Velas - Fase 1 (vitrine + carrinho). Sem dependências. */
+/* Loja Melty - vitrine, carrinho e páginas. Sem dependências. */
 (function () {
   "use strict";
 
@@ -9,6 +9,8 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
+  function reduzMovimento() { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
+  function achar(lista, id) { return lista.filter(function (x) { return x.id === id; })[0]; }
 
   /* ---------- carrinho (localStorage, com fallback em memória) ---------- */
   var memoria = {};
@@ -25,49 +27,75 @@
   }
 
   /* ---------- dados ---------- */
+  function json(url, padrao) {
+    return fetch(url).then(function (r) { return r.json(); }).catch(function () { return padrao; });
+  }
   function carregar() {
     return Promise.all([
       fetch("data/config.json").then(function (r) { return r.json(); }),
       fetch("data/produtos.json").then(function (r) { return r.json(); }),
-      fetch("data/banners.json").then(function (r) { return r.json(); }).catch(function () { return []; })
-    ]).then(function (v) { return { config: v[0], produtos: v[1], banners: v[2] }; });
+      json("data/banners.json", []),
+      json("data/categorias.json", [])
+    ]).then(function (v) { return { config: v[0], produtos: v[1], banners: v[2], categorias: v[3] }; });
   }
 
+  /* ---------- ícones ---------- */
+  var ICONES = {
+    mao: '<path d="M12 21s-7-4.4-9.3-9A5.2 5.2 0 0 1 12 6.5 5.2 5.2 0 0 1 21.3 12C19 16.6 12 21 12 21z"/>',
+    cartao: '<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6 15h4"/>',
+    caixa: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/>',
+    zap: '<path d="M21 12a8 8 0 0 1-11.7 7L4 20l1.1-4.2A8 8 0 1 1 21 12z"/>'
+  };
+  function svg(nome) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + (ICONES[nome] || ICONES.mao) + "</svg>"; }
+
   /* ---------- layout comum ---------- */
-  function montarLayout(config) {
-    var cart = totalItens(lerCarrinho());
+  function montarLayout(d) {
+    var c = d.config;
+    var avisos = (c.faixa_avisos || []).map(function (t, i) { return '<span' + (i === 0 ? ' class="on"' : "") + ">" + esc(t) + "</span>"; }).join("");
+    var logo = c.logo
+      ? '<img src="' + esc(c.logo) + '" alt="' + esc(c.loja) + '">'
+      : "<b>" + esc(String(c.loja).toUpperCase()) + "</b><small>velas aromáticas</small>";
+    var itens = '<a href="index.html">Início</a>' +
+      d.categorias.filter(function (k) { return d.produtos.some(function (p) { return p.categoria === k.id; }); })
+        .map(function (k) { return '<a href="catalogo.html?cat=' + encodeURIComponent(k.id) + '">' + esc(k.nome) + "</a>"; }).join("") +
+      '<a href="index.html#quem-somos">Quem somos</a><a href="prazos.html">Prazos e Envio</a>' +
+      '<a href="https://wa.me/' + esc(c.whatsapp) + '" rel="noopener">Contato</a>';
+
     document.getElementById("topo").innerHTML =
-      '<div class="wrap">' +
-      '<a class="logo" href="index.html">' + esc(config.loja) + "</a>" +
-      "<nav>" +
-      '<a href="index.html">Velas</a>' +
-      '<a href="prazos.html">Prazos e Envio</a>' +
-      '<a class="cart-link" href="carrinho.html">Carrinho <span class="badge" id="badge">' + cart + "</span></a>" +
-      "</nav></div>";
+      (avisos ? '<div class="announce" aria-live="polite">' + avisos + "</div>" : "") +
+      '<div class="head-row"><div class="head-left"><button class="menu-btn" id="menuBtn" aria-label="Abrir menu" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>' +
+      '<a class="logo" href="index.html">' + logo + "</a>" +
+      '<div class="head-right"><a class="cart-link" href="carrinho.html" aria-label="Carrinho"><svg viewBox="0 0 24 24"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8a3 3 0 0 1 6 0"/></svg><span class="badge" id="badge">' + totalItens(lerCarrinho()) + "</span></a></div></div>" +
+      '<nav class="main" id="menu" aria-label="Menu principal">' + itens + "</nav>";
+
+    document.getElementById("menuBtn").onclick = function () {
+      var m = document.getElementById("menu"), aberto = m.classList.toggle("open");
+      this.setAttribute("aria-expanded", aberto ? "true" : "false");
+    };
+
+    var msgs = document.querySelectorAll(".announce span");
+    if (msgs.length > 1 && !reduzMovimento()) {
+      var k = 0;
+      setInterval(function () {
+        msgs[k].classList.remove("on"); k = (k + 1) % msgs.length; msgs[k].classList.add("on");
+      }, 4000);
+    }
+
     document.getElementById("rodape").innerHTML =
-      '<div class="wrap"><p><strong>' + esc(config.loja) + "</strong> · " + esc(config.slogan) + "</p>" +
-      '<p><a href="prazos.html">Prazos e Envio</a>' +
-      '<a href="https://instagram.com/' + esc(config.instagram) + '" rel="noopener">Instagram</a>' +
-      '<a href="https://wa.me/' + esc(config.whatsapp) + '" rel="noopener">WhatsApp</a>' +
-      '<a href="mailto:' + esc(config.email) + '">' + esc(config.email) + "</a></p></div>";
+      '<div class="wrap"><div class="cols">' +
+      "<div><h4>" + esc(c.loja) + "</h4><p>" + esc(c.slogan) + ".</p></div>" +
+      '<div><h4>Institucional</h4><a href="index.html#quem-somos">Quem somos</a><a href="prazos.html">Prazos e Envio</a></div>' +
+      '<div><h4>Atendimento</h4><a href="https://wa.me/' + esc(c.whatsapp) + '" rel="noopener">WhatsApp</a>' +
+      '<a href="https://instagram.com/' + esc(c.instagram) + '" rel="noopener">Instagram @' + esc(c.instagram) + "</a>" +
+      '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + "</a></div></div>" +
+      '<div class="copy">© ' + new Date().getFullYear() + " " + esc(c.loja) + " · Velas aromáticas artesanais</div></div>";
   }
   function atualizarBadge() {
     var b = document.getElementById("badge");
     if (b) b.textContent = totalItens(lerCarrinho());
   }
-
   function avisoPrazo(config) {
     return '<div class="notice"><strong>Prazo de entrega:</strong> ' + esc(config.aviso_prazo) + "</div>";
-  }
-
-  /* ---------- páginas ---------- */
-  function cardProduto(p) {
-    var tag = "";
-    if (p.estoque <= 0) tag = '<span class="tag">Esgotado</span>';
-    else if (p.estoque === 1) tag = '<span class="tag low">Última unidade</span>';
-    return '<a class="card" href="produto.html?id=' + encodeURIComponent(p.id) + '">' +
-      '<div class="img"><img src="' + esc(p.imagem) + '" alt="' + esc(p.nome) + '" loading="lazy">' + tag + "</div>" +
-      '<div class="info"><h3>' + esc(p.nome) + '</h3><span class="price">' + brl.format(p.preco) + "</span></div></a>";
   }
 
   /* ---------- banner / carrossel ---------- */
@@ -75,8 +103,11 @@
     if (!banners || !banners.length) return "";
     var slides = banners.map(function (b, i) {
       var img = '<img src="' + esc(b.imagem) + '" alt="' + esc(b.alt || "") + '"' + (i ? ' loading="lazy"' : "") + ">";
-      var cap = b.legenda ? '<div class="cap">' + esc(b.legenda) + "</div>" : "";
-      return (b.link ? '<a class="slide" href="' + esc(b.link) + '">' : '<div class="slide">') + img + cap + (b.link ? "</a>" : "</div>");
+      var over = "";
+      if (b.titulo) {
+        over = '<div class="over"><h2>' + esc(b.titulo) + "</h2>" + (b.botao ? '<span class="pill">' + esc(b.botao) + "</span>" : "") + "</div>";
+      }
+      return (b.link ? '<a class="slide" href="' + esc(b.link) + '">' : '<div class="slide">') + img + over + (b.link ? "</a>" : "</div>");
     }).join("");
     var controles = "";
     if (banners.length > 1) {
@@ -94,17 +125,17 @@
     function ir(k) {
       i = (k + n) % n;
       track.style.transform = "translateX(-" + (i * 100) + "%)";
-      dots.forEach(function (d, j) { d.setAttribute("aria-current", j === i ? "true" : "false"); });
-    }
-    function iniciar() {
-      parar();
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      timer = setInterval(function () { ir(i + 1); }, 5000);
+      dots.forEach(function (b, j) { b.setAttribute("aria-current", j === i ? "true" : "false"); });
     }
     function parar() { if (timer) { clearInterval(timer); timer = null; } }
+    function iniciar() {
+      parar();
+      if (reduzMovimento()) return;
+      timer = setInterval(function () { ir(i + 1); }, 5000);
+    }
     el.querySelector(".prev").onclick = function () { ir(i - 1); iniciar(); };
     el.querySelector(".next").onclick = function () { ir(i + 1); iniciar(); };
-    dots.forEach(function (d, j) { d.onclick = function () { ir(j); iniciar(); }; });
+    dots.forEach(function (b, j) { b.onclick = function () { ir(j); iniciar(); }; });
     el.addEventListener("mouseenter", parar);
     el.addEventListener("mouseleave", iniciar);
     var x0 = null;
@@ -116,31 +147,85 @@
     ir(0); iniciar();
   }
 
+  /* ---------- vitrine ---------- */
+  function cardProduto(p) {
+    var tag = "", esgotado = p.estoque <= 0;
+    if (esgotado) tag = '<span class="tag">Esgotado</span>';
+    else if (p.estoque === 1) tag = '<span class="tag low">Última unidade</span>';
+    return '<a class="card" href="produto.html?id=' + encodeURIComponent(p.id) + '">' +
+      '<div class="img"><img src="' + esc(p.imagem) + '" alt="' + esc(p.nome) + '" loading="lazy">' + tag + "</div>" +
+      '<div class="info"><h3>' + esc(p.nome) + '</h3><span class="price">' + brl.format(p.preco) + "</span>" +
+      '<span class="pill' + (esgotado ? " off" : "") + '">' + (esgotado ? "Esgotado" : "Ver vela") + "</span></div></a>";
+  }
+  function disponiveisPrimeiro(lista) {
+    return lista.filter(function (p) { return p.estoque > 0; }).concat(lista.filter(function (p) { return p.estoque <= 0; }));
+  }
+  function secao(titulo, sub, lista) {
+    if (!lista.length) return "";
+    return '<section class="sec wrap"><div class="sec-head"><h2>' + esc(titulo) + "</h2>" + (sub ? "<p>" + esc(sub) + "</p>" : "") +
+      '</div><div class="grid">' + disponiveisPrimeiro(lista).map(cardProduto).join("") + "</div></section>";
+  }
+
+  function htmlBeneficios(lista) {
+    if (!lista || !lista.length) return "";
+    return '<div class="wrap"><div class="benef">' + lista.map(function (b) {
+      return "<div>" + svg(b.icone) + "<div><strong>" + esc(b.titulo) + "</strong><span>" + esc(b.texto) + "</span></div></div>";
+    }).join("") + "</div></div>";
+  }
+
   function paginaHome(d) {
-    document.getElementById("app").innerHTML = htmlBanner(d.banners) +
-      '<div class="wrap"><section class="hero"><h1>' + esc(d.config.loja) + "</h1><p>" + esc(d.config.slogan) + "</p></section>" +
-      avisoPrazo(d.config) +
-      '<div class="grid">' + d.produtos.map(cardProduto).join("") + "</div></div>";
+    var c = d.config, qs = c.quem_somos, dep = c.depoimentos || [];
+    var html = htmlBanner(d.banners) + htmlBeneficios(c.beneficios) +
+      secao("Novidades", "acabou de chegar", d.produtos.filter(function (p) { return p.novidade; })) +
+      secao("Mais vendidas", "as queridinhas", d.produtos.filter(function (p) { return p.destaque; })) +
+      secao("Nossas velas", "feitas com carinho", d.produtos);
+    html += '<div class="wrap">' + avisoPrazo(c) + "</div>";
+    if (qs) {
+      html += '<section class="about" id="quem-somos"><div class="wrap"><img src="' + esc(qs.imagem) + '" alt="" loading="lazy"><div><h2>' + esc(qs.titulo) + "</h2>" +
+        (qs.textos || []).map(function (t) { return "<p>" + esc(t) + "</p>"; }).join("") + "</div></div></section>";
+    }
+    if (dep.length) {
+      html += '<section class="sec wrap"><div class="sec-head"><h2>Depoimentos</h2><p>quem já conhece, ama</p></div><div class="reviews">' +
+        dep.map(function (r) { return '<div class="review"><div class="stars">★★★★★</div><p>' + esc(r.texto) + "</p><b>" + esc(r.nome) + "</b></div>"; }).join("") + "</div></section>";
+    }
+    html += '<section class="contact"><h2>Fale com a gente</h2><p>Dúvidas, encomendas especiais ou presentes? Ficamos felizes em ajudar.</p>' +
+      '<a class="btn light" href="https://wa.me/' + esc(c.whatsapp) + '" rel="noopener">Chamar no WhatsApp</a>' +
+      '<a class="btn ghost" href="https://instagram.com/' + esc(c.instagram) + '" rel="noopener">Ver o Instagram</a></section>';
+    document.getElementById("app").innerHTML = html;
     iniciarCarrossel((d.banners || []).length);
   }
 
+  function paginaCatalogo(d) {
+    var cat = new URLSearchParams(location.search).get("cat");
+    var k = cat ? achar(d.categorias, cat) : null;
+    var lista = cat ? d.produtos.filter(function (p) { return p.categoria === cat; }) : d.produtos;
+    var titulo = k ? k.nome : "Todos os produtos";
+    document.title = titulo + " | " + d.config.loja;
+    var corpo = lista.length ? secao(titulo, k && k.descricao ? k.descricao : "", lista)
+      : '<div class="wrap page"><h1>' + esc(titulo) + "</h1><p>Nenhum produto por aqui ainda.</p></div>";
+    document.getElementById("app").innerHTML = corpo + '<div class="wrap">' + avisoPrazo(d.config) + "</div>";
+  }
+
+  /* ---------- produto ---------- */
   function paginaProduto(d) {
     var id = new URLSearchParams(location.search).get("id");
-    var p = d.produtos.filter(function (x) { return x.id === id; })[0];
+    var p = achar(d.produtos, id);
     var app = document.getElementById("app");
     if (!p) {
       app.innerHTML = '<div class="wrap page"><h1>Produto não encontrado</h1><p><a href="index.html">Voltar para a loja</a></p></div>';
       return;
     }
     document.title = p.nome + " | " + d.config.loja;
+    var k = achar(d.categorias, p.categoria);
     var esgotado = p.estoque <= 0;
     var estoqueTxt = esgotado ? "Esgotado" : (p.estoque === 1 ? "Última unidade disponível" : p.estoque + " unidades disponíveis");
     app.innerHTML =
       '<div class="wrap"><div class="product">' +
       '<div><img src="' + esc(p.imagem) + '" alt="' + esc(p.nome) + '"></div>' +
-      "<div><p class='muted small'><a href='index.html'>Velas</a> / " + esc(p.nome) + "</p>" +
+      '<div><p class="crumbs"><a href="index.html">Início</a> / ' +
+      (k ? '<a href="catalogo.html?cat=' + encodeURIComponent(k.id) + '">' + esc(k.nome) + "</a> / " : "") + esc(p.nome) + "</p>" +
       "<h1>" + esc(p.nome) + '</h1><div class="price">' + brl.format(p.preco) + "</div>" +
-      '<p class="small ' + (esgotado ? "" : "muted") + '">' + estoqueTxt + "</p>" +
+      '<p class="small muted">' + estoqueTxt + "</p>" +
       "<p>" + esc(p.descricao) + "</p>" +
       '<div class="qty"><button id="menos" aria-label="Diminuir">−</button><span id="q">1</span><button id="mais" aria-label="Aumentar">+</button></div>' +
       '<button class="btn" id="add"' + (esgotado ? " disabled" : "") + ">" + (esgotado ? "Esgotado" : "Adicionar ao carrinho") + "</button>" +
@@ -161,13 +246,14 @@
     };
   }
 
+  /* ---------- carrinho ---------- */
   function paginaCarrinho(d) {
     var app = document.getElementById("app");
     function desenhar() {
       var c = lerCarrinho();
       var linhas = [], subtotal = 0, ajustou = false;
       Object.keys(c).forEach(function (id) {
-        var p = d.produtos.filter(function (x) { return x.id === id; })[0];
+        var p = achar(d.produtos, id);
         if (!p || p.estoque <= 0) { delete c[id]; ajustou = true; return; }
         if (c[id] > p.estoque) { c[id] = p.estoque; ajustou = true; }
         subtotal += p.preco * c[id];
@@ -205,7 +291,7 @@
         b.onclick = function () {
           var id = b.getAttribute("data-id"), a = b.getAttribute("data-a");
           var cc = lerCarrinho();
-          var p = d.produtos.filter(function (x) { return x.id === id; })[0];
+          var p = achar(d.produtos, id);
           if (a === "rm") delete cc[id];
           if (a === "mais") cc[id] = Math.min(p.estoque, (cc[id] || 0) + 1);
           if (a === "menos") { cc[id] = (cc[id] || 1) - 1; if (cc[id] <= 0) delete cc[id]; }
@@ -216,6 +302,7 @@
     desenhar();
   }
 
+  /* ---------- prazos ---------- */
   function paginaPrazos(d) {
     document.getElementById("app").innerHTML =
       '<div class="wrap page"><h1>Prazos e Envio</h1>' + avisoPrazo(d.config) +
@@ -229,11 +316,12 @@
   }
 
   /* ---------- início ---------- */
-  var paginas = { home: paginaHome, produto: paginaProduto, carrinho: paginaCarrinho, prazos: paginaPrazos };
+  var paginas = { home: paginaHome, catalogo: paginaCatalogo, produto: paginaProduto, carrinho: paginaCarrinho, prazos: paginaPrazos };
   carregar().then(function (d) {
-    montarLayout(d.config);
+    montarLayout(d);
     var tipo = document.body.getAttribute("data-page");
     (paginas[tipo] || paginaHome)(d);
+    if (location.hash) { var alvo = document.getElementById(location.hash.slice(1)); if (alvo) alvo.scrollIntoView(); }
   }).catch(function () {
     document.getElementById("app").innerHTML =
       '<div class="wrap page"><p>Não foi possível carregar a loja. Abra o site por um servidor (veja o README).</p></div>';
