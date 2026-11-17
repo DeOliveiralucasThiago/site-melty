@@ -19,7 +19,7 @@ export async function onRequestGet({ env, request }) {
   const cab = ["Pedido", "Data", "Situação", "Nome", "E-mail", "Telefone", "CPF", "CEP", "Endereço", "Cidade", "UF", "Itens", "Subtotal", "Desconto", "Frete", "Total", "Cupom", "Entrega", "Rastreio", "Pago em", "Enviado em", "Entregue em"];
   const linhas = rows.map((p) => [
     numeroDoPedido(p.id), quando(p.criado_em), STATUS_TEXTO[p.status], p.cliente_nome, p.cliente_email, p.cliente_telefone, p.cliente_cpf, p.end_cep,
-    `${p.end_rua}, ${p.end_numero}${p.end_complemento ? " - " + p.end_complemento : ""} - ${p.end_bairro}`, p.end_cidade, p.end_uf, p.itens,
+    p.retirada ? "RETIRADA NO LOCAL" : `${p.end_rua}, ${p.end_numero}${p.end_complemento ? " - " + p.end_complemento : ""} - ${p.end_bairro}`, p.end_cidade, p.end_uf, p.itens,
     dinheiro(p.subtotal_centavos), dinheiro(p.desconto_centavos), dinheiro(p.frete_centavos), dinheiro(p.total_centavos), p.cupom_codigo, p.frete_servico, p.rastreio,
     quando(p.pago_em), quando(p.enviado_em), quando(p.entregue_em)]);
   const csv = "﻿" + [cab, ...linhas].map((l) => l.map(cel).join(";")).join("\r\n") + "\r\n";

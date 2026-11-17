@@ -351,7 +351,7 @@
       app.innerHTML = '<div class="wrap page"><h1>Finalizar compra</h1><p>O pagamento online ainda não está disponível. <a href="carrinho.html">Voltar ao carrinho</a> e finalizar pelo WhatsApp.</p></div>';
       return;
     }
-    var estado = { cupom: "", resumo: null, frete_id: "", opcoes: null };
+    var estado = { cupom: "", resumo: null, frete_id: "", opcoes: null, retirada: false };
 
     function campo(id, rotulo, extra) {
       return '<div class="campo"><label for="' + id + '">' + rotulo + '</label><input id="' + id + '" name="' + id + '" ' + (extra || "") + " required></div>";
@@ -362,11 +362,12 @@
       '<div class="dois">' + campo("email", "E-mail", 'type="email" autocomplete="email" maxlength="120"') + campo("email2", "Confirme o e-mail", 'type="email" autocomplete="off" maxlength="120"') + "</div>" +
       '<div class="dois">' + campo("telefone", "Telefone com DDD", 'type="tel" autocomplete="tel" inputmode="numeric" placeholder="(27) 99999-0000"') + campo("cpf", "CPF", 'inputmode="numeric" autocomplete="off" placeholder="000.000.000-00"') + "</div>" +
       '<p class="small muted">Usamos o CPF para emitir o pagamento e controlar cupons. Veja a <a href="politica-de-privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>.</p>' +
-      "<h2>Endereço de entrega</h2>" +
-      '<div class="dois">' + campo("cep", "CEP", 'inputmode="numeric" autocomplete="postal-code" placeholder="00000-000"') + campo("rua", "Rua", 'autocomplete="address-line1" maxlength="100"') + "</div>" +
+      '<h2 id="tituloEnd">Endereço de entrega</h2>' +
+      '<div class="dois">' + campo("cep", "CEP", 'inputmode="numeric" autocomplete="postal-code" placeholder="00000-000"') + "<div></div></div>" +
+      '<div id="camposEntrega">' + campo("rua", "Rua", 'autocomplete="address-line1" maxlength="100"') +
       '<div class="tres">' + campo("numero", "Número", 'maxlength="10"') + '<div class="campo"><label for="complemento">Complemento</label><input id="complemento" maxlength="40" autocomplete="address-line2"></div>' + campo("bairro", "Bairro", 'maxlength="60"') + "</div>" +
       '<div class="dois">' + campo("cidade", "Cidade", 'maxlength="60" autocomplete="address-level2"') +
-      '<div class="campo"><label for="uf">Estado</label><select id="uf" required><option value="">Selecione</option>' + UFS.map(function (u) { return "<option>" + u + "</option>"; }).join("") + "</select></div></div>" +
+      '<div class="campo"><label for="uf">Estado</label><select id="uf" required><option value="">Selecione</option>' + UFS.map(function (u) { return "<option>" + u + "</option>"; }).join("") + "</select></div></div></div>" +
       '<h2>Forma de entrega</h2><div id="entrega"><p class="small muted">Informe o CEP para ver as opções de entrega.</p></div>' +
       "<h2>Cupom de desconto</h2>" +
       '<div class="cupom"><input id="cupom" maxlength="20" placeholder="Código do cupom" autocomplete="off"><button type="button" class="btn ghost" id="aplicar">Aplicar</button></div><p id="msgCupom" class="small" role="status"></p>' +
@@ -386,9 +387,9 @@
       }).join("") +
         '<div class="linha-res"><span>Subtotal</span><span>' + brl.format(r.subtotal) + "</span></div>" +
         (r.desconto > 0 ? '<div class="linha-res desc"><span>Desconto (' + esc(r.cupom.codigo) + ")</span><span>− " + brl.format(r.desconto) + "</span></div>" : "") +
-        '<div class="linha-res"><span>Frete' + (r.entrega ? " (" + esc(r.entrega) + ")" : "") + "</span><span>" + (r.frete === null ? "informe o CEP" : (r.frete > 0 ? brl.format(r.frete) : "Grátis")) + "</span></div>" +
+        '<div class="linha-res"><span>' + (estado.retirada ? "Retirada no local" : "Frete" + (r.entrega ? " (" + esc(r.entrega) + ")" : "")) + "</span><span>" + (r.frete === null ? "informe o CEP" : (r.frete > 0 ? brl.format(r.frete) : "Grátis")) + "</span></div>" +
         '<div class="linha-res total"><span>Total' + (r.frete === null ? " (sem frete)" : "") + "</span><span>" + brl.format(r.total) + "</span></div>" +
-        '<p class="small muted">Valores conferidos pelo servidor no momento da compra.</p>' + avisoPrazo(d.config);
+        '<p class="small muted">Valores conferidos pelo servidor no momento da compra.</p>' + (estado.retirada ? "" : avisoPrazo(d.config));
     }
     function simular(comCupom) {
       var corpo = { itens: itens };
@@ -410,14 +411,23 @@
       if (!estado.opcoes.length) { box.innerHTML = '<p class="erro">Ainda não entregamos neste CEP. <a href="https://wa.me/' + esc(d.config.whatsapp) + '" rel="noopener">Fale com a gente pelo WhatsApp</a>.</p>'; return; }
       box.innerHTML = estado.opcoes.map(function (o) {
         return '<label class="opcao"><input type="radio" name="frete" value="' + esc(o.id) + '"' + (o.id === estado.frete_id ? " checked" : "") + "><span><b>" + esc(o.servico) + "</b> · " + (o.preco > 0 ? brl.format(o.preco) : "Grátis") +
+          (o.retirada ? '<br><span class="small muted">Retire em: ' + esc(o.endereco) + (o.instrucoes ? ". " + esc(o.instrucoes) : "") + "</span>" : "") +
           (textoPrazo(o) ? '<br><span class="small muted">' + esc(textoPrazo(o)) + "</span>" : "") + "</span></label>";
       }).join("");
-      box.querySelectorAll("input[name=frete]").forEach(function (r) { r.onchange = function () { estado.frete_id = r.value; atualizarResumo(); }; });
+      box.querySelectorAll("input[name=frete]").forEach(function (r) { r.onchange = function () { estado.frete_id = r.value; modoRetirada(); atualizarResumo(); }; });
+      modoRetirada();
+    }
+    // Na retirada não há endereço de entrega: some o bloco de endereço (o CEP continua)
+    function modoRetirada() {
+      var o = (estado.opcoes || []).filter(function (x) { return x.id === estado.frete_id; })[0];
+      estado.retirada = !!(o && o.retirada);
+      $("camposEntrega").hidden = estado.retirada;
+      $("tituloEnd").textContent = estado.retirada ? "Seu CEP" : "Endereço de entrega";
     }
     var tCep = null;
     function buscarFrete() {
       var cepD = $("cep").value.replace(/\D/g, "");
-      estado.opcoes = null; estado.frete_id = "";
+      estado.opcoes = null; estado.frete_id = ""; estado.retirada = false; $("camposEntrega").hidden = false; $("tituloEnd").textContent = "Endereço de entrega";
       if (cepD.length !== 8) { $("entrega").innerHTML = '<p class="small muted">Informe o CEP para ver as opções de entrega.</p>'; atualizarResumo(); return; }
       $("entrega").innerHTML = '<p class="small muted">Calculando…</p>';
       enviarJson("/api/frete/cotar", { itens: itens, cep: cepD }).then(function (r) {
@@ -448,7 +458,8 @@
       ev.preventDefault();
       var erro = $("erro"); erro.textContent = "";
       function v(id) { return $(id).value.trim(); }
-      var falta = ["nome", "email", "email2", "telefone", "cpf", "cep", "rua", "numero", "bairro", "cidade", "uf"].filter(function (id) { return !v(id); });
+      var obrig = ["nome", "email", "email2", "telefone", "cpf", "cep"].concat(estado.retirada ? [] : ["rua", "numero", "bairro", "cidade", "uf"]);
+      var falta = obrig.filter(function (id) { return !v(id); });
       if (falta.length) { erro.textContent = "Preencha todos os campos obrigatórios."; $(falta[0]).focus(); return; }
       if (v("email").toLowerCase() !== v("email2").toLowerCase()) { erro.textContent = "Os dois e-mails não são iguais. Confira para receber os avisos do pedido."; $("email2").focus(); return; }
       if (!cpfValido(v("cpf"))) { erro.textContent = "CPF inválido."; $("cpf").focus(); return; }
@@ -458,8 +469,8 @@
       var botao = $("enviar"); botao.disabled = true; botao.textContent = "Criando o pedido…";
       enviarJson("/api/pedidos", {
         itens: itens,
-        cliente: { nome: v("nome"), email: v("email"), telefone: v("telefone"), cpf: v("cpf"), cep: v("cep"), rua: v("rua"), numero: v("numero"), complemento: v("complemento"),
-                   bairro: v("bairro"), cidade: v("cidade"), uf: v("uf"), cupom: estado.cupom, frete_id: estado.frete_id, aceite: true }
+        cliente: { nome: v("nome"), email: v("email"), telefone: v("telefone"), cpf: v("cpf"), cep: v("cep"), rua: estado.retirada ? "" : v("rua"), numero: estado.retirada ? "" : v("numero"), complemento: estado.retirada ? "" : v("complemento"),
+                   bairro: estado.retirada ? "" : v("bairro"), cidade: estado.retirada ? "" : v("cidade"), uf: estado.retirada ? "" : v("uf"), cupom: estado.cupom, frete_id: estado.frete_id, aceite: true }
       }).then(function (r) {
         if (!r.ok) {
           erro.textContent = (r.dados && r.dados.erro) || "Não foi possível criar o pedido.";
@@ -479,14 +490,16 @@
     return new Date(sql.replace(" ", "T") + "Z").toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
   }
   var ETAPAS = [["aguardando_pagamento", "Pedido recebido"], ["pago", "Pagamento confirmado"], ["em_producao", "Preparando o pedido"], ["enviado", "Enviado"], ["entregue", "Entregue"]];
+  var ETAPAS_RETIRADA = [["aguardando_pagamento", "Pedido recebido"], ["pago", "Pagamento confirmado"], ["em_producao", "Preparando o pedido"], ["pronto_retirada", "Pronto para retirada"], ["entregue", "Retirado"]];
 
   function paginaPedido(d) {
     var token = new URLSearchParams(location.search).get("t") || "";
     var app = document.getElementById("app");
     var timer = null;
     function desenhar(p) {
-      var idx = ETAPAS.map(function (e) { return e[0]; }).indexOf(p.status);
-      var etapas = idx < 0 ? "" : '<ol class="etapas">' + ETAPAS.map(function (e, i) {
+      var lista = p.retirada ? ETAPAS_RETIRADA : ETAPAS;
+      var idx = lista.map(function (e) { return e[0]; }).indexOf(p.status);
+      var etapas = idx < 0 ? "" : '<ol class="etapas">' + lista.map(function (e, i) {
         var h = p.historico.filter(function (x) { return x.tipo === (e[0] === "aguardando_pagamento" ? "criado" : e[0]); })[0];
         return '<li class="' + (i < idx ? "feito" : i === idx ? "atual" : "") + '"><b>' + e[1] + "</b>" + (h ? "<span>" + esc(quando(h.quando)) + "</span>" : "") + "</li>";
       }).join("") + "</ol>";
@@ -494,14 +507,17 @@
       if (p.status === "cancelado") aviso = '<div class="notice">Este pedido foi cancelado. Se já pagou, fale com a gente pelo WhatsApp.</div>';
       if (p.status === "reembolsado") aviso = '<div class="notice">O pagamento deste pedido foi reembolsado.</div>';
       if (p.status === "aguardando_pagamento") aviso = '<div class="notice"><strong>Falta pagar.</strong> Reservamos seus itens até ' + esc(quando(p.expira_em)) + '. <p><a class="btn" href="' + esc(p.pagamento_url) + '">Pagar agora</a></p></div>';
-      var envioAviso = p.prazo_envio_dias ? '<div class="notice">Seu pedido será enviado em até <strong>' + p.prazo_envio_dias + " dias úteis</strong>. Assim que for postado, você recebe o código de rastreio por e-mail.</div>" : "";
+      var envioAviso = p.prazo_envio_dias
+        ? (p.retirada ? '<div class="notice">Seu pedido ficará pronto para retirada em até <strong>' + p.prazo_envio_dias + " dias úteis</strong>. Avisaremos por e-mail assim que estiver pronto.</div>"
+                      : '<div class="notice">Seu pedido será enviado em até <strong>' + p.prazo_envio_dias + " dias úteis</strong>. Assim que for postado, você recebe o código de rastreio por e-mail.</div>") : "";
+      var prontoAviso = p.retirada_endereco ? '<div class="notice"><strong>' + (p.status === "pronto_retirada" ? "Seu pedido está pronto para retirada em:" : "Retirada em:") + "</strong><br>" + esc(p.retirada_endereco) + (p.retirada_instrucoes ? "<br>" + esc(p.retirada_instrucoes) : "") + "</div>" : "";
       var rastreio = p.rastreio ? '<div class="notice"><strong>Código de rastreio:</strong> ' + esc(p.rastreio) + ' · <a href="' + esc(p.rastreio_url) + '" target="_blank" rel="noopener">acompanhar a entrega</a></div>' : "";
-      app.innerHTML = '<div class="wrap page"><h1>Pedido #' + p.numero + "</h1><p class='muted'>Olá, " + esc(p.primeiro_nome) + "! Entrega em " + esc(p.cidade) + "/" + esc(p.uf) + (p.entrega ? " · " + esc(p.entrega) + (p.prazo_dias !== null && p.prazo_dias !== undefined ? " (previsão: até " + p.prazo_dias + " dias úteis após o envio)" : "") : "") + ".</p>" +
-        aviso + envioAviso + rastreio + etapas +
+      app.innerHTML = '<div class="wrap page"><h1>Pedido #' + p.numero + "</h1><p class='muted'>Olá, " + esc(p.primeiro_nome) + "! " + (p.retirada ? "Retirada no local" : "Entrega em " + esc(p.cidade) + "/" + esc(p.uf)) + (p.entrega && !p.retirada ? " · " + esc(p.entrega) + (p.prazo_dias !== null && p.prazo_dias !== undefined ? " (previsão: até " + p.prazo_dias + " dias úteis após o envio)" : "") : "") + ".</p>" +
+        aviso + envioAviso + prontoAviso + rastreio + etapas +
         "<h2>Itens</h2>" + p.itens.map(function (i) { return '<div class="linha-res"><span>' + i.qtd + "× " + esc(i.nome) + "</span><span>" + brl.format(i.subtotal) + "</span></div>"; }).join("") +
         '<div class="linha-res"><span>Subtotal</span><span>' + brl.format(p.subtotal) + "</span></div>" +
         (p.desconto > 0 ? '<div class="linha-res desc"><span>Desconto' + (p.cupom ? " (" + esc(p.cupom) + ")" : "") + "</span><span>− " + brl.format(p.desconto) + "</span></div>" : "") +
-        '<div class="linha-res"><span>Frete</span><span>' + (p.frete > 0 ? brl.format(p.frete) : "Grátis") + "</span></div>" +
+        '<div class="linha-res"><span>' + (p.retirada ? "Retirada no local" : "Frete") + "</span><span>" + (p.frete > 0 ? brl.format(p.frete) : "Grátis") + "</span></div>" +
         '<div class="linha-res total"><span>Total</span><span>' + brl.format(p.total) + "</span></div>" +
         '<p class="small muted">Guarde este endereço (link) para acompanhar o pedido. Dúvidas? <a href="https://wa.me/' + esc(d.config.whatsapp) + '" rel="noopener">Fale com a gente</a>.</p></div>';
     }

@@ -52,7 +52,7 @@ const slug = (t) => String(t).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
  * Com o Melhor Envio, "transporte_dias" será o prazo devolvido por eles e a margem é somada da mesma forma.
  */
 export async function cotarFrete(db, env, { cep, linhas, subtotal_centavos }) {
-  const c = await cfg(db, ["frete_regioes", "frete_provisorio", "frete_gratis_acima", "embalagem_padrao", "prazo_producao_dias_uteis"]);
+  const c = await cfg(db, ["frete_regioes", "frete_provisorio", "frete_gratis_acima", "embalagem_padrao", "prazo_producao_dias_uteis", "retirada"]);
   const uf = ufDoCep(cep);
   const pacote = montarPacote(linhas, { ...EMBALAGEM_PADRAO, ...(c.embalagem_padrao || {}) });
   const gratisAcima = Math.round(Number(c.frete_gratis_acima || 0) * 100);
@@ -66,10 +66,21 @@ export async function cotarFrete(db, env, { cep, linhas, subtotal_centavos }) {
       id: "regiao:" + slug(r.nome), servico: r.nome, transportadora: "", preco_centavos: Math.round(Number(r.preco) * 100),
       transporte_dias: r.prazo ?? null, prazo_dias_uteis: r.prazo === null || r.prazo === undefined ? null : r.prazo + preparo,
     }));
-  } else {
-    // Nenhuma região configurada: um valor único provisório
+  } else if (Number(c.frete_provisorio) > 0 || !(c.retirada && c.retirada.ativa)) {
+    // Nenhuma região configurada: um valor único provisório (some se só existir retirada)
     opcoes = [{ id: "unico", servico: "Entrega", transportadora: "", preco_centavos: Math.round(Number(c.frete_provisorio || 0) * 100), transporte_dias: null, prazo_dias_uteis: null }];
+  } else {
+    opcoes = [];
   }
   opcoes = opcoes.map((o) => (gratis ? { ...o, preco_centavos: 0, gratis: true } : { ...o, gratis: false }));
+
+  // Retirada no local: sempre grátis, sem prazo de transporte; pode valer só para alguns CEPs (prefixos)
+  const ret = c.retirada;
+  if (ret && ret.ativa) {
+    const d = String(cep ?? "").replace(/\D/g, "");
+    const prefixos = Array.isArray(ret.ceps) ? ret.ceps : [];
+    if (!prefixos.length || prefixos.some((p) => d.startsWith(p)))
+      opcoes.push({ id: "retirada", servico: ret.nome || "Retirada no local", transportadora: "", preco_centavos: 0, transporte_dias: null, prazo_dias_uteis: null, gratis: false, retirada: true, endereco: ret.endereco, instrucoes: ret.instrucoes || "" });
+  }
   return { uf, preparo_dias: preparo, pacote, opcoes };
 }

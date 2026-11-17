@@ -36,6 +36,13 @@ Fluxo: carrinho → `checkout.html` (dados, endereço, cupom) → `POST /api/ped
   O estado vem do CEP (faixas em `functions/_lib/frete.js`, conferir antes de publicar). O prazo mostrado ao cliente é **único**: transporte + uma margem de dias (configurável, somada pelo sistema), **contado a partir do envio** (postagem). Não se fala em "produção" nem em prazo desde o pagamento para o cliente.
   O **Melhor Envio** entra no mesmo encaixe (`cotarFrete`), devolvendo opções no mesmo formato. Falta o token e conferir a documentação.
 
+## Retirada no local e avisos para a loja
+- **Retirada:** Painel > Textos e contato > "Retirada no local" (ligar, endereço, instruções, e CEPs que podem retirar, se quiser limitar). No fechamento aparece como uma opção
+  grátis; ao escolher, o cliente **não informa endereço**. Etapas: pago → em preparo → **pronto para retirada** (o painel envia o e-mail "sua encomenda está pronta para retirada
+  no seguinte endereço…") → retirado. Pedido de retirada não pode ser "enviado" e pedido de entrega não pode ser "pronto para retirada".
+- **Aviso para a loja:** Painel > Textos e contato > "Avisos por e-mail para a loja" (até 3 e-mails; ao pagar e, opcionalmente, ao criar o pedido). O e-mail traz cliente, telefone
+  (link do WhatsApp), itens, entrega e total, e **responder vai direto para o cliente** (reply-to). Não leva CPF. Depende do envio de e-mails estar ativo (`EMAIL_PROVEDOR`).
+
 ## E-mails automáticos (Fase 5)
 Cada mudança do pedido grava um e-mail numa **fila** (`emails`) e o envio acontece em seguida, com nova tentativa se falhar (a cada 5 min, até 5 vezes;
 e-mail com mais de 1 dia é descartado). Uma falha de e-mail nunca derruba o pedido. Cada tipo sai **uma vez por pedido**.

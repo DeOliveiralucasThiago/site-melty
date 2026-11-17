@@ -3,7 +3,7 @@ import { calcularPedido, reservarCupom, confirmarUso, liberarUso, registrarCompr
 import { provedor } from "./pagamento.js";
 import * as v from "./validar.js";
 import { numeroDoPedido } from "./util.js";
-import { enfileirar } from "./email.js";
+import { enfileirar, enfileirarAvisoLoja } from "./email.js";
 import { cotarFrete } from "./frete.js";
 export { numeroDoPedido };
 
@@ -11,7 +11,7 @@ export const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", 
 export const MINUTOS_RESERVA = 30;
 const MOTIVO_EXPIRADO = "Pagamento não confirmado no prazo";
 export const STATUS_TEXTO = {
-  aguardando_pagamento: "Aguardando pagamento", pago: "Pago", em_producao: "Em preparo", enviado: "Enviado",
+  aguardando_pagamento: "Aguardando pagamento", pago: "Pago", em_producao: "Em preparo", enviado: "Enviado", pronto_retirada: "Pronto para retirada",
   entregue: "Entregue", cancelado: "Cancelado", reembolsado: "Reembolsado",
 };
 export const REVISAO_TEXTO = {
@@ -24,7 +24,7 @@ export const REVISAO_TEXTO = {
 const agoraSql = (d = new Date()) => d.toISOString().slice(0, 19).replace("T", " ");
 
 /* ---------- dados do cliente ---------- */
-export function lerCliente(c) {
+export function lerCliente(c, { exigirEndereco = true } = {}) {
   if (!c || typeof c !== "object") throw new Error("Dados do pedido inválidos.");
   const email = v.texto(c.email, "E-mail", { max: 120, obrigatorio: true }).toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("E-mail inválido.");
@@ -36,13 +36,14 @@ export function lerCliente(c) {
   const cep = String(c.cep ?? "").replace(/\D/g, "");
   if (cep.length !== 8) throw new Error("CEP: informe os 8 números.");
   const uf = String(c.uf ?? "").toUpperCase();
-  if (!UFS.includes(uf)) throw new Error("Estado (UF) inválido.");
+  if (exigirEndereco && !UFS.includes(uf)) throw new Error("Estado (UF) inválido.");
   if (c.aceite !== true) throw new Error("É preciso aceitar a Política de Privacidade para continuar.");
   return {
     nome: v.texto(c.nome, "Nome", { max: 80, min: 3 }), email, telefone: tel, cpf, cep,
-    rua: v.texto(c.rua, "Rua", { max: 100, min: 2 }), numero: v.texto(c.numero, "Número", { max: 10, min: 1 }),
-    complemento: v.texto(c.complemento, "Complemento", { max: 40 }), bairro: v.texto(c.bairro, "Bairro", { max: 60, min: 2 }),
-    cidade: v.texto(c.cidade, "Cidade", { max: 60, min: 2 }), uf, cupom: v.texto(c.cupom, "Cupom", { max: 20 }), frete_id: v.texto(c.frete_id, "Forma de entrega", { max: 40 }),
+    // Na retirada no local não há endereço de entrega
+    rua: exigirEndereco ? v.texto(c.rua, "Rua", { max: 100, min: 2 }) : "", numero: exigirEndereco ? v.texto(c.numero, "Número", { max: 10, min: 1 }) : "",
+    complemento: exigirEndereco ? v.texto(c.complemento, "Complemento", { max: 40 }) : "", bairro: exigirEndereco ? v.texto(c.bairro, "Bairro", { max: 60, min: 2 }) : "",
+    cidade: exigirEndereco ? v.texto(c.cidade, "Cidade", { max: 60, min: 2 }) : "", uf: exigirEndereco ? uf : "", cupom: v.texto(c.cupom, "Cupom", { max: 20 }), frete_id: v.texto(c.frete_id, "Forma de entrega", { max: 40 }),
   };
 }
 
@@ -58,7 +59,7 @@ export async function criarPedido(env, corpo, { urlBase }) {
   const prov = provedor(env);
   if (!prov) throw new ErroNegocio("O pagamento online ainda não está disponível. Fale com a gente pelo WhatsApp.", "pagamento_inativo");
   let cliente;
-  try { cliente = lerCliente(corpo.cliente); }
+  try { cliente = lerCliente(corpo.cliente, { exigirEndereco: false }); }
   catch (e) { throw e instanceof ErroNegocio ? e : new ErroNegocio(e.message, "dados"); }
   await liberarVencidos(db, env);
 
@@ -67,7 +68,11 @@ export async function criarPedido(env, corpo, { urlBase }) {
   if (!cot.opcoes.length) throw new ErroNegocio("Ainda não entregamos neste CEP. Fale com a gente pelo WhatsApp.", "frete");
   const opcao = cliente.frete_id ? cot.opcoes.find((o) => o.id === cliente.frete_id) : (cot.opcoes.length === 1 ? cot.opcoes[0] : null);
   if (!opcao) throw new ErroNegocio("Escolha uma forma de entrega.", "frete");
-  const frete = calc.frete_gratis ? 0 : opcao.preco_centavos;
+  if (!opcao.retirada) {
+    try { cliente = lerCliente(corpo.cliente, { exigirEndereco: true }); }
+    catch (e) { throw e instanceof ErroNegocio ? e : new ErroNegocio(e.message, "dados"); }
+  }
+  const frete = opcao.retirada ? 0 : (calc.frete_gratis ? 0 : opcao.preco_centavos);
   const total = calc.total_centavos + frete;
   const token = crypto.randomUUID().replace(/-/g, "");
   const expira = agoraSql(new Date(Date.now() + MINUTOS_RESERVA * 60000));
@@ -78,11 +83,16 @@ export async function criarPedido(env, corpo, { urlBase }) {
   try {
     // Tudo ou nada: se o estoque faltar, o banco recusa (estoque nunca fica negativo) e nada é gravado.
     await db.batch([
-      db.prepare(`INSERT INTO pedidos (token, status, cliente_nome, cliente_email, cliente_telefone, cliente_cpf, end_cep, end_rua, end_numero, end_complemento, end_bairro, end_cidade, end_uf,
-                  subtotal_centavos, desconto_centavos, frete_centavos, total_centavos, cupom_codigo, provedor, expira_em, url_base, frete_servico, frete_id, frete_prazo_dias)
-                  VALUES (?, 'aguardando_pagamento', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(token, cliente.nome, cliente.email, cliente.telefone, cliente.cpf, cliente.cep, cliente.rua, cliente.numero, cliente.complemento, cliente.bairro, cliente.cidade, cliente.uf,
-              calc.subtotal_centavos, calc.desconto_centavos, frete, total, calc.cupom?.codigo ?? "", prov.nome, expira, urlBase, opcao.servico, opcao.id, opcao.prazo_dias_uteis ?? null),
+      (() => {
+        const col = {
+          token, status: "aguardando_pagamento", cliente_nome: cliente.nome, cliente_email: cliente.email, cliente_telefone: cliente.telefone, cliente_cpf: cliente.cpf,
+          end_cep: cliente.cep, end_rua: cliente.rua, end_numero: cliente.numero, end_complemento: cliente.complemento, end_bairro: cliente.bairro, end_cidade: cliente.cidade, end_uf: cliente.uf,
+          subtotal_centavos: calc.subtotal_centavos, desconto_centavos: calc.desconto_centavos, frete_centavos: frete, total_centavos: total, cupom_codigo: calc.cupom?.codigo ?? "",
+          provedor: prov.nome, expira_em: expira, url_base: urlBase, frete_servico: opcao.servico, frete_id: opcao.id, frete_prazo_dias: opcao.prazo_dias_uteis ?? null, retirada: opcao.retirada ? 1 : 0,
+        };
+        const nomes = Object.keys(col);
+        return db.prepare(`INSERT INTO pedidos (${nomes.join(", ")}) VALUES (${nomes.map(() => "?").join(", ")})`).bind(...Object.values(col));
+      })(),
       ...calc.itens.map((l) => db.prepare(`INSERT INTO pedido_itens (pedido_id, produto_id, nome, qtd, unitario_centavos, cheio_centavos, promocao) VALUES (${sub}, ?, ?, ?, ?, ?, ?)`)
         .bind(token, l.id, l.nome, l.qtd, l.unitario, l.cheio, l.promocao ? 1 : 0)),
       ...calc.itens.map((l) => db.prepare("UPDATE produtos SET estoque = estoque - ? WHERE id = ?").bind(l.qtd, l.id)),
@@ -98,7 +108,7 @@ export async function criarPedido(env, corpo, { urlBase }) {
   try {
     const cob = await prov.criarCobranca({ pedido, itens: calc.itens, cliente, urlBase });
     await db.prepare("UPDATE pedidos SET pagamento_url = ?, pagamento_ref = ? WHERE id = ?").bind(cob.url, cob.ref, pedido.id).run();
-    try { await enfileirar(db, pedido.id, "recebido", { env }); } catch (e) { console.error("e-mail recebido não enfileirado", e); }
+    try { await enfileirar(db, pedido.id, "recebido", { env }); await enfileirarAvisoLoja(db, pedido.id, "criado", { env }); } catch (e) { console.error("e-mail recebido não enfileirado", e); }
     return { token, numero: numeroDoPedido(pedido.id), url: cob.url };
   } catch (err) {
     await cancelarPedido(db, pedido.id, "Falha ao iniciar o pagamento", { avisar: false });
@@ -174,24 +184,29 @@ export async function aplicarPagamento(env, token, ev) {
   if (motivos.length) await db.prepare("UPDATE pedidos SET revisao = ? WHERE id = ?").bind(motivos.join(","), p.id).run();
   await confirmarUso(db, env, { pedidoRef: token, cpf: p.cliente_cpf });
   await evento(db, p.id, "pago", motivos.length ? "Atenção: " + motivos.join(", ") : "");
-  try { await enfileirar(db, p.id, "pago", { env }); } catch (e) { console.error("e-mail de pagamento não enfileirado", e); }
+  try { await enfileirar(db, p.id, "pago", { env }); await enfileirarAvisoLoja(db, p.id, "pago", { env }); } catch (e) { console.error("e-mail de pagamento não enfileirado", e); }
   return { ok: true, revisao: motivos };
 }
 
 /* ---------- avanço manual (painel) ---------- */
-const PROXIMOS = {
-  aguardando_pagamento: ["cancelado"],
-  pago: ["em_producao", "enviado", "cancelado", "reembolsado"],
-  em_producao: ["enviado", "cancelado", "reembolsado"],
-  enviado: ["entregue", "cancelado", "reembolsado"],
-  entregue: ["reembolsado"],
-  cancelado: [], reembolsado: [],
-};
+// Entrega: pago → (em preparo) → enviado → entregue. Retirada: pago → (em preparo) → pronto para retirada → entregue (retirado).
+export function proximosStatus(p) {
+  const saida = p.retirada ? "pronto_retirada" : "enviado";
+  return {
+    aguardando_pagamento: ["cancelado"],
+    pago: ["em_producao", saida, "cancelado", "reembolsado"],
+    em_producao: [saida, "cancelado", "reembolsado"],
+    enviado: ["entregue", "cancelado", "reembolsado"],
+    pronto_retirada: ["entregue", "cancelado", "reembolsado"],
+    entregue: ["reembolsado"],
+    cancelado: [], reembolsado: [],
+  }[p.status] || [];
+}
 
 export async function mudarStatus(db, id, novo, { rastreio = "", env } = {}) {
   const p = await db.prepare("SELECT * FROM pedidos WHERE id = ?").bind(id).first();
   if (!p) throw new ErroNegocio("Pedido não encontrado.", "pedido");
-  if (!(PROXIMOS[p.status] || []).includes(novo)) throw new ErroNegocio(`Não dá para mudar de “${STATUS_TEXTO[p.status]}” para “${STATUS_TEXTO[novo] ?? novo}”.`, "transicao");
+  if (!proximosStatus(p).includes(novo)) throw new ErroNegocio(`Não dá para mudar de “${STATUS_TEXTO[p.status]}” para “${STATUS_TEXTO[novo] ?? novo}”.`, "transicao");
 
   if (novo === "cancelado") {
     await cancelarPedido(db, id, "Cancelado pelo painel", { somenteAguardando: false, devolverEstoque: p.status !== "enviado", env });
@@ -205,6 +220,12 @@ export async function mudarStatus(db, id, novo, { rastreio = "", env } = {}) {
     try { await enfileirar(db, id, "enviado", { env }); } catch (e) { console.error("e-mail de envio não enfileirado", e); }
     return;
   }
+  if (novo === "pronto_retirada") {
+    await db.prepare("UPDATE pedidos SET status = 'pronto_retirada', atualizado_em = datetime('now') WHERE id = ?").bind(id).run();
+    await evento(db, id, "pronto_retirada");
+    try { await enfileirar(db, id, "pronto_retirada", { env }); } catch (e) { console.error("e-mail de retirada não enfileirado", e); }
+    return;
+  }
   const col = novo === "entregue" ? ", entregue_em = datetime('now')" : "";
   await db.prepare(`UPDATE pedidos SET status = ?${col}, atualizado_em = datetime('now') WHERE id = ?`).bind(novo, id).run();
   await evento(db, id, novo);
@@ -214,13 +235,17 @@ export async function mudarStatus(db, id, novo, { rastreio = "", env } = {}) {
 /* ---------- visão pública (sem dados sensíveis) ---------- */
 export async function paraAcompanhamento(db, p) {
   const itens = (await db.prepare("SELECT nome, qtd, unitario_centavos FROM pedido_itens WHERE pedido_id = ? ORDER BY id").bind(p.id).all()).results;
-  const ev = (await db.prepare("SELECT tipo, criado_em FROM pedido_eventos WHERE pedido_id = ? AND tipo IN ('criado','pago','em_producao','enviado','entregue','cancelado') ORDER BY id").bind(p.id).all()).results;
+  const ev = (await db.prepare("SELECT tipo, criado_em FROM pedido_eventos WHERE pedido_id = ? AND tipo IN ('criado','pago','em_producao','enviado','pronto_retirada','entregue','cancelado') ORDER BY id").bind(p.id).all()).results;
   const espera = p.status === "aguardando_pagamento";
   const cfgEnvio = await db.prepare("SELECT valor FROM config WHERE chave = 'prazo_postagem_dias_uteis'").first();
   const diasEnvio = cfgEnvio ? Number(JSON.parse(cfgEnvio.valor)) || 0 : 0;
+  const cfgRet = p.retirada ? await db.prepare("SELECT valor FROM config WHERE chave = 'retirada'").first() : null;
+  const ret = cfgRet ? JSON.parse(cfgRet.valor) : null;
   return {
     numero: numeroDoPedido(p.id), status: p.status, status_texto: STATUS_TEXTO[p.status],
-    primeiro_nome: p.cliente_nome.split(" ")[0], cidade: p.end_cidade, uf: p.end_uf, entrega: p.frete_servico, prazo_dias: p.frete_prazo_dias, prazo_envio_dias: ["pago", "em_producao"].includes(p.status) && diasEnvio > 0 ? diasEnvio : null,
+    primeiro_nome: p.cliente_nome.split(" ")[0], cidade: p.end_cidade, uf: p.end_uf, entrega: p.frete_servico, retirada: !!p.retirada,
+    retirada_endereco: p.retirada && ["pronto_retirada", "entregue"].includes(p.status) && ret ? ret.endereco : null, retirada_instrucoes: p.retirada && p.status === "pronto_retirada" && ret ? ret.instrucoes || "" : null,
+    prazo_dias: p.frete_prazo_dias, prazo_envio_dias: ["pago", "em_producao"].includes(p.status) && diasEnvio > 0 ? diasEnvio : null,
     itens: itens.map((i) => ({ nome: i.nome, qtd: i.qtd, unitario: i.unitario_centavos / 100, subtotal: (i.unitario_centavos * i.qtd) / 100 })),
     subtotal: p.subtotal_centavos / 100, desconto: p.desconto_centavos / 100, frete: p.frete_centavos / 100, total: p.total_centavos / 100, cupom: p.cupom_codigo,
     rastreio: p.rastreio, rastreio_url: p.rastreio ? `https://melhorrastreio.com.br/rastreio/${encodeURIComponent(p.rastreio)}` : "",

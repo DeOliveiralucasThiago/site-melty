@@ -42,24 +42,36 @@ async function contexto(db, env, pedidoId) {
   const p = await db.prepare("SELECT * FROM pedidos WHERE id = ?").bind(pedidoId).first();
   if (!p) return null;
   const itens = (await db.prepare("SELECT nome, qtd, unitario_centavos FROM pedido_itens WHERE pedido_id = ? ORDER BY id").bind(pedidoId).all()).results;
-  const cfg = Object.fromEntries((await db.prepare("SELECT chave, valor FROM config WHERE chave IN ('loja','whatsapp','email','prazo_producao_dias_uteis','prazo_postagem_dias_uteis','aviso_prazo')").all()).results.map((r) => [r.chave, JSON.parse(r.valor)]));
+  const cfg = Object.fromEntries((await db.prepare("SELECT chave, valor FROM config WHERE chave IN ('loja','whatsapp','email','prazo_producao_dias_uteis','prazo_postagem_dias_uteis','aviso_prazo','retirada','aviso_loja')").all()).results.map((r) => [r.chave, JSON.parse(r.valor)]));
   const urlBase = (env?.SITE_URL || p.url_base || "").replace(/\/+$/, "");
-  return { pedido: { ...p, numero: numeroDoPedido(p.id) }, itens, config: { loja: cfg.loja || "Melty", whatsapp: cfg.whatsapp || "", email: cfg.email || "", prazo: cfg.prazo_producao_dias_uteis, envio_dias: Number(cfg.prazo_postagem_dias_uteis) || 0, aviso_prazo: cfg.aviso_prazo || "" }, urlBase };
+  return { pedido: { ...p, numero: numeroDoPedido(p.id) }, itens, config: { loja: cfg.loja || "Melty", whatsapp: cfg.whatsapp || "", email: cfg.email || "", prazo: cfg.prazo_producao_dias_uteis, envio_dias: Number(cfg.prazo_postagem_dias_uteis) || 0, retirada: cfg.retirada || null, aviso_prazo: cfg.aviso_prazo || "" }, avisoLoja: cfg.aviso_loja || null, urlBase };
 }
 
 /** Grava o e-mail na fila. Cada tipo sai uma vez por pedido; com forcar=true, regrava e reenvia. */
-export async function enfileirar(db, pedidoId, tipo, { env, forcar = false } = {}) {
+export async function enfileirar(db, pedidoId, tipo, { env, forcar = false, para, responderPara = "" } = {}) {
   const ctx = await contexto(db, env, pedidoId);
   if (!ctx) return false;
+  const destino = para || ctx.pedido.cliente_email;
   const m = montarEmail(tipo, ctx);
-  const r = await db.prepare("INSERT OR IGNORE INTO emails (pedido_id, tipo, para, assunto, html, texto) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(pedidoId, tipo, ctx.pedido.cliente_email, m.assunto, m.html, m.texto).run();
+  const r = await db.prepare("INSERT OR IGNORE INTO emails (pedido_id, tipo, para, responder_para, assunto, html, texto) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(pedidoId, tipo, destino, responderPara, m.assunto, m.html, m.texto).run();
   if (!r.meta.changes && forcar) {
-    await db.prepare("UPDATE emails SET para = ?, assunto = ?, html = ?, texto = ?, status = 'pendente', tentativas = 0, versao = versao + 1, erro = '', atualizado_em = datetime('now') WHERE pedido_id = ? AND tipo = ?")
-      .bind(ctx.pedido.cliente_email, m.assunto, m.html, m.texto, pedidoId, tipo).run();
+    await db.prepare("UPDATE emails SET assunto = ?, html = ?, texto = ?, status = 'pendente', tentativas = 0, versao = versao + 1, erro = '', atualizado_em = datetime('now') WHERE pedido_id = ? AND tipo = ? AND para = ?")
+      .bind(m.assunto, m.html, m.texto, pedidoId, tipo, destino).run();
     return true;
   }
   return !!r.meta.changes;
+}
+
+/** Avisa a loja (os e-mails configurados no painel) que há um pedido novo. quando: "criado" (ainda sem pagamento) ou "pago". */
+export async function enfileirarAvisoLoja(db, pedidoId, quando, { env } = {}) {
+  const ctx = await contexto(db, env, pedidoId);
+  const a = ctx && ctx.avisoLoja;
+  if (!a || !Array.isArray(a.emails) || !a.emails.length) return 0;
+  if ((quando === "criado" && !a.ao_criar) || (quando === "pago" && !a.ao_pagar)) return 0;
+  let n = 0;
+  for (const para of a.emails) if (await enfileirar(db, pedidoId, quando === "criado" ? "loja_novo" : "loja_pago", { env, para, responderPara: ctx.pedido.cliente_email })) n++;
+  return n;
 }
 
 /* ---------- enviar ---------- */
@@ -84,7 +96,7 @@ export async function processarFila(env, { enviar } = {}) {
     if (!r.meta.changes) continue;
     const e = await db.prepare("SELECT * FROM emails WHERE id = ?").bind(id).first();
     try {
-      const out = await prov.enviar({ para: e.para, assunto: e.assunto, html: e.html, texto: e.texto, responderPara: reply, chave: `melty-email-${e.id}-v${e.versao}` });
+      const out = await prov.enviar({ para: e.para, assunto: e.assunto, html: e.html, texto: e.texto, responderPara: e.responder_para || reply, chave: `melty-email-${e.id}-v${e.versao}` });
       await db.prepare("UPDATE emails SET status = ?, enviado_em = datetime('now'), atualizado_em = datetime('now'), provedor = ?, provedor_ref = ?, erro = '' WHERE id = ?")
         .bind(prov.nome === "teste" ? "simulado" : "enviado", prov.nome, out?.id ?? "", id).run();
       enviados++;

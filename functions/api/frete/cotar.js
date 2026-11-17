@@ -14,7 +14,8 @@ export async function onRequestPost({ request, env }) {
     const q = await cotarFrete(env.DB, env, { cep, linhas: c.itens, subtotal_centavos: c.subtotal_centavos });
     return json({
       uf: q.uf,
-      opcoes: q.opcoes.map((o) => ({ id: o.id, servico: o.servico, transportadora: o.transportadora, preco: o.preco_centavos / 100, prazo_dias_uteis: o.prazo_dias_uteis, gratis: o.gratis })),
+      opcoes: q.opcoes.map((o) => ({ id: o.id, servico: o.servico, transportadora: o.transportadora, preco: o.preco_centavos / 100, prazo_dias_uteis: o.prazo_dias_uteis, gratis: o.gratis,
+        ...(o.retirada ? { retirada: true, endereco: o.endereco, instrucoes: o.instrucoes } : {}) })),
     });
   } catch (e) {
     if (e instanceof ErroNegocio) return json({ erro: e.message, codigo: e.codigo }, 422);

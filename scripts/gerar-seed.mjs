@@ -31,7 +31,7 @@ paginas.forEach((p) => sql.push(`INSERT INTO paginas (slug, titulo, conteudo) VA
 
 const config = {
   loja: cfg.loja, slogan: cfg.slogan, whatsapp: cfg.whatsapp, instagram: cfg.instagram, email: cfg.email,
-  frete_provisorio: 0, prazo_producao_dias_uteis: cfg.prazo_producao_dias_uteis, prazo_postagem_dias_uteis: cfg.prazo_postagem_dias_uteis, aviso_prazo: cfg.aviso_prazo,
+  frete_provisorio: 0, prazo_producao_dias_uteis: cfg.prazo_producao_dias_uteis, prazo_postagem_dias_uteis: cfg.prazo_postagem_dias_uteis, retirada: cfg.retirada, aviso_loja: cfg.aviso_loja, aviso_prazo: cfg.aviso_prazo,
   faixa_avisos: cfg.faixa_avisos, beneficios: cfg.beneficios,
   quem_somos: { titulo: cfg.quem_somos.titulo, textos: cfg.quem_somos.textos, imagem_id: null },
   depoimentos: cfg.depoimentos, logo_id: null,

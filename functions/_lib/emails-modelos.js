@@ -8,9 +8,10 @@ const quando = (sql) => (sql ? new Date(sql.replace(" ", "T") + "Z").toLocaleStr
 export const TIPOS = {
   recebido: "Pedido recebido", pago: "Pagamento confirmado", enviado: "Pedido enviado", entregue: "Pedido entregue",
   cancelado: "Pedido cancelado", expirado: "Pedido expirado", reembolsado: "Reembolso",
+  pronto_retirada: "Pronto para retirada", loja_novo: "Aviso à loja: novo pedido", loja_pago: "Aviso à loja: pagamento confirmado",
 };
 
-function layout({ assunto, titulo, paragrafos, botoes = [], resumo = "", rodapeExtra = "", c }) {
+function layout({ assunto, titulo, paragrafos, botoes = [], resumo = "", rodapeExtra = "", c, interno = false }) {
   const p = paragrafos.map((t) => `<p style="margin:0 0 14px;font-size:16px;line-height:1.55">${t}</p>`).join("");
   const b = botoes.map((x) => `<a href="${esc(x.url)}" style="display:inline-block;background:${x.claro ? "#ffffff" : "#B52141"};color:${x.claro ? "#8f1a33" : "#ffffff"};border:2px solid #B52141;text-decoration:none;padding:11px 24px;border-radius:999px;font-weight:bold;font-size:15px;margin:0 8px 8px 0">${esc(x.texto)}</a>`).join("");
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(assunto)}</title></head>
@@ -20,7 +21,7 @@ function layout({ assunto, titulo, paragrafos, botoes = [], resumo = "", rodapeE
 <tr><td align="center" style="background:#B52141;border-radius:15px 15px 0 0;padding:20px"><span style="font-family:Georgia,'Times New Roman',serif;font-size:26px;letter-spacing:7px;color:#ffffff">${esc(String(c.loja).toUpperCase())}</span></td></tr>
 <tr><td style="padding:28px 28px 8px"><h1 style="font-family:Georgia,'Times New Roman',serif;font-size:24px;line-height:1.25;color:#8f1a33;margin:0 0 14px">${titulo}</h1>${p}<div style="margin:18px 0 6px">${b}</div></td></tr>
 ${resumo ? `<tr><td style="padding:8px 28px 8px">${resumo}</td></tr>` : ""}
-<tr><td style="padding:18px 28px 26px;border-top:1px solid #f1dede;font-size:13px;line-height:1.5;color:#75656a">${rodapeExtra}Dúvidas? Responda este e-mail ou chame no <a href="https://wa.me/${esc(c.whatsapp)}" style="color:#B52141">WhatsApp</a>.<br>Você recebeu esta mensagem porque fez um pedido na ${esc(c.loja)}. É um aviso sobre o seu pedido, não é propaganda.</td></tr>
+<tr><td style="padding:18px 28px 26px;border-top:1px solid #f1dede;font-size:13px;line-height:1.5;color:#75656a">${rodapeExtra}${interno ? `Aviso interno da ${esc(c.loja)}, com dados do cliente: não encaminhe. Ao responder este e-mail, a resposta vai direto para o cliente.` : `Dúvidas? Responda este e-mail ou chame no <a href="https://wa.me/${esc(c.whatsapp)}" style="color:#B52141">WhatsApp</a>.<br>Você recebeu esta mensagem porque fez um pedido na ${esc(c.loja)}. É um aviso sobre o seu pedido, não é propaganda.`}</td></tr>
 </table></td></tr></table></body></html>`;
 }
 
@@ -30,7 +31,7 @@ function resumoHtml(pedido, itens) {
     itens.map((i) => linha(`${i.qtd}× ${esc(i.nome)}`, reais(i.unitario_centavos * i.qtd))).join("") +
     linha("Subtotal", reais(pedido.subtotal_centavos)) +
     (pedido.desconto_centavos > 0 ? linha(`Desconto${pedido.cupom_codigo ? " (" + esc(pedido.cupom_codigo) + ")" : ""}`, "− " + reais(pedido.desconto_centavos)) : "") +
-    linha("Frete" + (pedido.frete_servico ? " (" + esc(pedido.frete_servico) + ")" : ""), pedido.frete_centavos > 0 ? reais(pedido.frete_centavos) : "Grátis") +
+    linha(pedido.retirada ? "Entrega" : "Frete" + (pedido.frete_servico ? " (" + esc(pedido.frete_servico) + ")" : ""), pedido.frete_centavos > 0 ? reais(pedido.frete_centavos) : (pedido.retirada ? esc(pedido.frete_servico || "Retirada no local") : "Grátis")) +
     linha("Total", reais(pedido.total_centavos), true) + "</table>";
 }
 function resumoTexto(pedido, itens) {
@@ -51,7 +52,7 @@ export function montarEmail(tipo, ctx) {
   const num = pedido.numero;
   const resumo = resumoHtml(pedido, itens), resumoT = resumoTexto(pedido, itens);
   const acompanhar = { texto: "Acompanhar meu pedido", url: link };
-  let assunto, titulo, paragrafos, botoes = [acompanhar], paragrafosTxt, mostrarResumo = true, rodapeExtra = "";
+  let assunto, titulo, paragrafos, botoes = [acompanhar], paragrafosTxt, mostrarResumo = true, rodapeExtra = "", interno = false;
 
   if (tipo === "recebido") {
     assunto = `Recebemos o seu pedido #${num}`;
@@ -65,12 +66,16 @@ export function montarEmail(tipo, ctx) {
     const prev = pedido.frete_prazo_dias;
     const previsao = prev !== null && prev !== undefined ? `Previsão de entrega: em até <b>${prev} dias úteis</b> após o envio do pedido.` : "";
     const envio = Number(c.envio_dias) || 0;
-    const fraseEnvio = envio > 0 ? `Seu pedido será enviado em até <b>${envio} dias úteis</b>` : "Em breve o seu pedido será separado e enviado";
-    const fraseEnvioTxt = envio > 0 ? `Seu pedido será enviado em até ${envio} dias úteis` : "Em breve o seu pedido será separado e enviado";
-    paragrafos = [`Recebemos o pagamento do pedido <b>#${num}</b>. ${fraseEnvio}. Assim que for postado, enviamos o código de rastreio por aqui.`,
-      previsao, c.aviso_prazo ? `<span style="color:#75656a;font-size:14px">${esc(c.aviso_prazo)}</span>` : ""].filter(Boolean);
-    paragrafosTxt = [`Pagamento confirmado, ${nomeTxt}! Recebemos o pagamento do pedido #${num}. ${fraseEnvioTxt}. Assim que for postado, enviamos o código de rastreio.`,
-      prev !== null && prev !== undefined ? `Previsão de entrega: em até ${prev} dias úteis após o envio do pedido.` : "", c.aviso_prazo || ""];
+    const ret = !!pedido.retirada;
+    const fraseEnvio = ret
+      ? (envio > 0 ? `Seu pedido ficará pronto para retirada em até <b>${envio} dias úteis</b>` : "Em breve o seu pedido estará pronto para retirada")
+      : (envio > 0 ? `Seu pedido será enviado em até <b>${envio} dias úteis</b>` : "Em breve o seu pedido será separado e enviado");
+    const fraseEnvioTxt = fraseEnvio.replace(/<[^>]+>/g, "");
+    const fim = ret ? "Avisaremos por e-mail assim que estiver pronto para retirada." : "Assim que for postado, enviamos o código de rastreio por aqui.";
+    paragrafos = [`Recebemos o pagamento do pedido <b>#${num}</b>. ${fraseEnvio}. ${fim}`,
+      ret ? "" : previsao, c.aviso_prazo && !ret ? `<span style="color:#75656a;font-size:14px">${esc(c.aviso_prazo)}</span>` : ""].filter(Boolean);
+    paragrafosTxt = [`Pagamento confirmado, ${nomeTxt}! Recebemos o pagamento do pedido #${num}. ${fraseEnvioTxt}. ${fim}`,
+      !ret && prev !== null && prev !== undefined ? `Previsão de entrega: em até ${prev} dias úteis após o envio do pedido.` : "", !ret ? (c.aviso_prazo || "") : ""];
   } else if (tipo === "enviado") {
     assunto = `Seu pedido #${num} está a caminho`;
     titulo = `Seu pedido está a caminho, ${nome}!`;
@@ -78,10 +83,35 @@ export function montarEmail(tipo, ctx) {
     paragrafos = [`O pedido <b>#${num}</b> foi postado. Código de rastreio: <b style="letter-spacing:1px">${esc(pedido.rastreio)}</b>.`, `O rastreio pode levar algumas horas para aparecer depois da postagem.`];
     botoes = [{ texto: "Rastrear a entrega", url: rastreioUrl }, { ...acompanhar, claro: true }];
     paragrafosTxt = [`Seu pedido #${num} foi postado. Código de rastreio: ${pedido.rastreio}`, `Rastrear: ${rastreioUrl}`];
+  } else if (tipo === "pronto_retirada") {
+    const r = c.retirada || {};
+    assunto = `Seu pedido #${num} está pronto para retirada`;
+    titulo = `Seu pedido está pronto, ${nome}!`;
+    paragrafos = [`Sua encomenda <b>#${num}</b> está pronta para retirada no seguinte endereço:`,
+      `<span style="display:block;background:#fff1f1;border:1px solid #FFD9D9;border-radius:12px;padding:12px 14px;font-size:16px"><b>${esc(r.endereco || "")}</b></span>`,
+      r.instrucoes ? esc(r.instrucoes) : "", "Se precisar combinar outro horário, é só responder este e-mail ou chamar no WhatsApp."].filter(Boolean);
+    mostrarResumo = false;
+    paragrafosTxt = [`Sua encomenda #${num} está pronta para retirada no seguinte endereço:`, r.endereco || "", r.instrucoes || "", "Se precisar combinar outro horário, responda este e-mail ou chame no WhatsApp."];
+  } else if (tipo === "loja_novo" || tipo === "loja_pago") {
+    const pago = tipo === "loja_pago";
+    const ret = !!pedido.retirada;
+    const tel = pedido.cliente_telefone;
+    const end = ret ? "" : `${pedido.end_rua}, ${pedido.end_numero}${pedido.end_complemento ? " - " + pedido.end_complemento : ""} - ${pedido.end_bairro}, ${pedido.end_cidade}/${pedido.end_uf}, CEP ${String(pedido.end_cep).replace(/^(\d{5})(\d{3})$/, "$1-$2")}`;
+    assunto = `${pago ? "Novo pedido PAGO" : "Novo pedido (aguardando pagamento)"} #${num}: ${reais(pedido.total_centavos)}${ret ? " (RETIRADA)" : ""} - ${nomeTxt}`;
+    titulo = pago ? `Novo pedido pago: #${num}` : `Novo pedido aguardando pagamento: #${num}`;
+    paragrafos = [
+      `<b>Cliente:</b> ${esc(pedido.cliente_nome)}<br><b>Telefone:</b> <a href="https://wa.me/55${esc(tel)}" style="color:#B52141">${esc(tel)}</a> (abrir no WhatsApp)<br><b>E-mail:</b> ${esc(pedido.cliente_email)}`,
+      ret ? `<b style="color:#B52141">RETIRADA NO LOCAL</b>: o cliente vai buscar. Avise quando o pedido estiver pronto (o e-mail “pronto para retirada” sai pelo painel).`
+          : `<b>Entrega:</b> ${esc(pedido.frete_servico || "")}<br>${esc(end)}`,
+      pago ? (Number(c.envio_dias) > 0 ? `Prazo prometido ao cliente: ${ret ? "pronto" : "enviar"} em até <b>${Number(c.envio_dias)} dias úteis</b>.` : "") : "Ainda sem pagamento: avisaremos de novo quando for pago, se o aviso de pagamento estiver ligado."].filter(Boolean);
+    botoes = [{ texto: "Abrir o painel", url: `${urlBase}/admin/` }];
+    paragrafosTxt = [`Cliente: ${pedido.cliente_nome} - ${tel} - ${pedido.cliente_email}`, ret ? "RETIRADA NO LOCAL: avise quando estiver pronto." : `Entrega: ${pedido.frete_servico || ""} - ${end}`, `Painel: ${urlBase}/admin/`];
+    rodapeExtra = "";
+    interno = true;
   } else if (tipo === "entregue") {
     assunto = `Seu pedido #${num} foi entregue`;
     titulo = `Pedido entregue! Esperamos que você ame, ${nome}`;
-    paragrafos = [`Marcamos o pedido <b>#${num}</b> como entregue. Para a vela durar mais: apare o pavio em 5 mm antes de acender e mantenha-a em local fresco, longe de sol direto.`,
+    paragrafos = [`Marcamos o pedido <b>#${num}</b> como ${pedido.retirada ? "retirado" : "entregue"}. Para a vela durar mais: apare o pavio em 5 mm antes de acender e mantenha-a em local fresco, longe de sol direto.`,
       `Se algo não saiu como esperado, é só responder este e-mail ou chamar no WhatsApp. Vamos resolver.`];
     mostrarResumo = false;
     paragrafosTxt = [`Marcamos o pedido #${num} como entregue. Para a vela durar mais: apare o pavio em 5 mm antes de acender e mantenha-a em local fresco, longe de sol direto.`, `Se algo não saiu como esperado, responda este e-mail ou chame no WhatsApp.`];
@@ -104,8 +134,8 @@ export function montarEmail(tipo, ctx) {
     paragrafosTxt = [`O pagamento do pedido #${num} foi reembolsado. O prazo para o valor aparecer depende do banco ou do meio de pagamento.`];
   } else throw new Error("Tipo de e-mail desconhecido: " + tipo);
 
-  const html = layout({ assunto, titulo, paragrafos, botoes, resumo: mostrarResumo ? resumo : "", rodapeExtra, c });
+  const html = layout({ assunto, titulo, paragrafos, botoes, resumo: mostrarResumo ? resumo : "", rodapeExtra, c, interno });
   const texto = [titulo.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&"), "", ...paragrafosTxt.filter(Boolean), "", ...(botoes.map((b) => `${b.texto}: ${b.url}`)), ...(mostrarResumo ? ["", resumoT] : []),
-    "", `Dúvidas? Responda este e-mail ou chame no WhatsApp: https://wa.me/${c.whatsapp}`, `${c.loja} - aviso sobre o seu pedido.`].join("\n");
+    "", ...(interno ? [`Aviso interno da ${c.loja}. Ao responder, a resposta vai para o cliente.`] : [`Dúvidas? Responda este e-mail ou chame no WhatsApp: https://wa.me/${c.whatsapp}`, `${c.loja} - aviso sobre o seu pedido.`])].join("\n");
   return { assunto, html, texto };
 }

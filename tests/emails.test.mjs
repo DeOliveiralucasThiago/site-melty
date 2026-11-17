@@ -80,6 +80,9 @@ await liberarVencidos(db, env);
 const ex = (await emailsDe(r3.token)).find((e) => e.tipo === "expirado");
 t("pedido vencido envia 'expirado' (diz que nada foi cobrado)", !!ex && ex.html.includes("Nada foi cobrado") && ex.html.includes("Voltar para a loja"));
 
+// esvazia a fila (o aviso à loja gera mais e-mails) para os testes de falha olharem só o que vem a seguir
+for (let i = 0; i < 10; i++) { const x = await processarFila(env, { enviar: async () => ({ id: "dreno" }) }); if (!x.enviados) break; }
+
 // ---- segurança do conteúdo ----
 const r4 = await pedir(3, [{ id: "lavanda", qtd: 1 }], { nome: '<script>alert(1)</script> "Zé"' });
 const e4 = (await emailsDe(r4.token))[0];

@@ -26,7 +26,7 @@ export async function onRequestGet({ env, waitUntil }) {
     quem_somos: { titulo: quem.titulo || "", textos: quem.textos || [], imagem: urlImagem(quem.imagem_id) },
   };
   delete config.logo_id;
-  for (const k of ["frete_provisorio", "frete_regioes", "frete_gratis_acima", "embalagem_padrao"]) delete config[k];
+  for (const k of ["frete_provisorio", "frete_regioes", "frete_gratis_acima", "embalagem_padrao", "aviso_loja", "retirada", "prazo_postagem_dias_uteis"]) delete config[k];
 
   const produtos = prods.results.map((p) => {
     const imagens = JSON.parse(p.imagens).map(urlImagem);

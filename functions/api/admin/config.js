@@ -30,6 +30,21 @@ const VALIDADORES = {
                prazo: r.prazo === "" || r.prazo === null || r.prazo === undefined ? null : v.inteiro(r.prazo, "Prazo de transporte (dias úteis)", 0, 60) };
     });
   },
+  retirada: (x) => {
+    const ativa = !!(x && x.ativa);
+    const nome = v.texto(x?.nome, "Nome da retirada", { max: 40 }) || "Retirada no local";
+    const endereco = v.texto(x?.endereco, "Endereço da retirada", { max: 200 });
+    if (ativa && !endereco) throw new Error("Retirada no local: informe o endereço de retirada.");
+    const ceps = (Array.isArray(x?.ceps) ? x.ceps : []).map((c) => String(c).replace(/\D/g, "")).filter(Boolean);
+    if (ceps.length > 30 || ceps.some((c) => c.length < 3 || c.length > 8)) throw new Error("CEPs da retirada: informe o começo do CEP, de 3 a 8 números (ex.: 29100). Deixe vazio para valer em qualquer CEP.");
+    return { ativa, nome, endereco, instrucoes: v.texto(x?.instrucoes, "Instruções da retirada", { max: 300 }), ceps: [...new Set(ceps)] };
+  },
+  aviso_loja: (x) => {
+    const emails = [...new Set((Array.isArray(x?.emails) ? x.emails : []).map((e) => String(e).trim().toLowerCase()).filter(Boolean))];
+    if (emails.length > 3) throw new Error("Avisos para a loja: no máximo 3 e-mails.");
+    for (const e of emails) if (e.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new Error(`Avisos para a loja: o e-mail “${e}” é inválido.`);
+    return { emails, ao_criar: !!x?.ao_criar, ao_pagar: x?.ao_pagar === undefined ? true : !!x.ao_pagar };
+  },
   frete_gratis_acima: (x) => v.decimal(x ?? 0, "Frete grátis a partir de", 0, 100000),
   embalagem_padrao: (x) => ({ altura: v.decimal(x?.altura, "Altura da caixa padrão", 1, 105), largura: v.decimal(x?.largura, "Largura da caixa padrão", 1, 105), comprimento: v.decimal(x?.comprimento, "Comprimento da caixa padrão", 1, 105) }),
   frete_provisorio: (x) => v.decimal(x ?? 0, "Frete provisório", 0, 500),

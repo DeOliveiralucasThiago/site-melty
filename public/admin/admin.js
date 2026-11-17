@@ -462,10 +462,14 @@
 
 
   /* ========== PEDIDOS ========== */
-  var STATUS_PED = { aguardando_pagamento: ["Aguardando pagamento", "cinza"], pago: ["Pago", ""], em_producao: ["Em preparo", ""], enviado: ["Enviado", ""], entregue: ["Entregue", ""], cancelado: ["Cancelado", "cinza"], reembolsado: ["Reembolsado", "cinza"] };
-  var PROXIMOS = { aguardando_pagamento: ["cancelado"], pago: ["em_producao", "enviado", "cancelado", "reembolsado"], em_producao: ["enviado", "cancelado", "reembolsado"], enviado: ["entregue", "cancelado", "reembolsado"], entregue: ["reembolsado"], cancelado: [], reembolsado: [] };
-  var ROTULO_ACAO = { em_producao: "Marcar em preparo", enviado: "Marcar como enviado", entregue: "Marcar como entregue", cancelado: "Cancelar pedido", reembolsado: "Marcar como reembolsado" };
-  var EVENTO_TXT = { criado: "Pedido criado", pago: "Pagamento confirmado", em_producao: "Em preparo", enviado: "Enviado", entregue: "Entregue", cancelado: "Cancelado", reembolsado: "Reembolsado", pagamento_recusado: "Pagamento recusado", revisao_resolvida: "Alerta conferido" };
+  var STATUS_PED = { aguardando_pagamento: ["Aguardando pagamento", "cinza"], pago: ["Pago", ""], em_producao: ["Em preparo", ""], enviado: ["Enviado", ""], pronto_retirada: ["Pronto para retirada", ""], entregue: ["Entregue", ""], cancelado: ["Cancelado", "cinza"], reembolsado: ["Reembolsado", "cinza"] };
+  // Entrega: pago → (em preparo) → enviado → entregue. Retirada: pago → (em preparo) → pronto para retirada → retirado.
+  function proximosDe(p) {
+    var saida = p.retirada ? "pronto_retirada" : "enviado";
+    return ({ aguardando_pagamento: ["cancelado"], pago: ["em_producao", saida, "cancelado", "reembolsado"], em_producao: [saida, "cancelado", "reembolsado"], enviado: ["entregue", "cancelado", "reembolsado"], pronto_retirada: ["entregue", "cancelado", "reembolsado"], entregue: ["reembolsado"], cancelado: [], reembolsado: [] })[p.status] || [];
+  }
+  var ROTULO_ACAO = { em_producao: "Marcar em preparo", enviado: "Marcar como enviado", pronto_retirada: "Pronto para retirada (avisa o cliente)", entregue: "Marcar como entregue", cancelado: "Cancelar pedido", reembolsado: "Marcar como reembolsado" };
+  var EVENTO_TXT = { criado: "Pedido criado", pago: "Pagamento confirmado", em_producao: "Em preparo", enviado: "Enviado", pronto_retirada: "Pronto para retirada", entregue: "Entregue", cancelado: "Cancelado", reembolsado: "Reembolsado", pagamento_recusado: "Pagamento recusado", revisao_resolvida: "Alerta conferido" };
   function dataHora(sql) { return sql ? new Date(sql.replace(" ", "T") + "Z").toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""; }
   function fmtCpf(c) { return c.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4"); }
   function fmtTel(t) { return t.length === 11 ? t.replace(/^(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3") : t.replace(/^(\d{2})(\d{4})(\d{4})$/, "($1) $2-$3"); }
@@ -474,7 +478,7 @@
   }
 
   var EMAIL_ST = { pendente: ["Na fila", "cinza"], enviando: ["Enviando", "cinza"], enviado: ["Enviado", ""], simulado: ["Simulado (teste)", "cinza"], falhou: ["Falhou", "vermelha"], descartado: ["Descartado", "cinza"] };
-  var EMAIL_TIPO = { recebido: "Pedido recebido", pago: "Pagamento confirmado", enviado: "Pedido enviado", entregue: "Pedido entregue", cancelado: "Pedido cancelado", expirado: "Pedido expirado", reembolsado: "Reembolso" };
+  var EMAIL_TIPO = { loja_novo: "Aviso à loja: novo pedido", loja_pago: "Aviso à loja: pagamento confirmado", pronto_retirada: "Pronto para retirada", recebido: "Pedido recebido", pago: "Pagamento confirmado", enviado: "Pedido enviado", entregue: "Pedido entregue", cancelado: "Pedido cancelado", expirado: "Pedido expirado", reembolsado: "Reembolso" };
   function verEmail(e) {
     dialogo(function (dlg) {
       return h("form", { method: "dialog" }, h("h2", null, EMAIL_TIPO[e.tipo] || e.tipo),
@@ -531,13 +535,15 @@
     limpar(corpo);
     var st = STATUS_PED[p.status] || [p.status, ""];
     var e = p.endereco, c = p.cliente;
-    var textoEnd = c.nome + "\n" + e.rua + ", " + e.numero + (e.complemento ? " - " + e.complemento : "") + "\n" + e.bairro + " - " + e.cidade + "/" + e.uf + "\nCEP " + e.cep.replace(/^(\d{5})(\d{3})$/, "$1-$2") + "\nTel. " + fmtTel(c.telefone);
+    var textoEnd = p.retirada ? c.nome + "\nRETIRADA NO LOCAL\nTel. " + fmtTel(c.telefone)
+      : c.nome + "\n" + e.rua + ", " + e.numero + (e.complemento ? " - " + e.complemento : "") + "\n" + e.bairro + " - " + e.cidade + "/" + e.uf + "\nCEP " + e.cep.replace(/^(\d{5})(\d{3})$/, "$1-$2") + "\nTel. " + fmtTel(c.telefone);
     var link = location.origin + "/pedido.html?t=" + p.token;
     var rastreio = h("input", { type: "text", maxlength: "30", placeholder: "Código de rastreio (ex.: AB123456789BR)", value: p.rastreio || "", "aria-label": "Código de rastreio" });
-    var proximos = PROXIMOS[p.status] || [];
+    var proximos = proximosDe(p);
 
     function mudar(novo) {
       var msg = novo === "cancelado" ? "Cancelar o pedido " + p.numero + "? Os itens voltam ao estoque (se ainda não foram enviados)." :
+                novo === "pronto_retirada" ? "Avisar " + c.nome + " por e-mail que o pedido está pronto para retirada?" :
                 novo === "reembolsado" ? "Marque só depois de ter feito o reembolso no painel do provedor de pagamento. Continuar?" : null;
       if (msg && !confirm(msg)) return;
       acao(api("POST", "/pedidos/" + p.id + "/status", { status: novo, rastreio: rastreio.value }), "Pedido atualizado.")
@@ -552,10 +558,10 @@
 
     corpo.appendChild(h("h2", null, "Cliente"));
     corpo.appendChild(h("p", null, c.nome, h("br"), c.email, h("br"), fmtTel(c.telefone) + " · ", h("a", { href: "https://wa.me/55" + c.telefone, target: "_blank", rel: "noopener" }, "abrir no WhatsApp"), h("br"), "CPF " + fmtCpf(c.cpf)));
-    corpo.appendChild(h("h2", null, "Entrega"));
+    corpo.appendChild(h("h2", null, p.retirada ? "Retirada no local" : "Entrega"));
     corpo.appendChild(h("p", { class: "endereco" }, textoEnd));
-    if (p.entrega) corpo.appendChild(h("p", { class: "dica" }, "Forma de entrega escolhida: " + p.entrega + (p.prazo_dias !== null && p.prazo_dias !== undefined ? " (previsão: " + p.prazo_dias + " dias úteis)" : "")));
-    corpo.appendChild(h("div", { class: "barra" }, h("button", { class: "btn sec mini", type: "button", onclick: function () { copiar(textoEnd); } }, "Copiar endereço")));
+    if (p.entrega) corpo.appendChild(h("p", { class: "dica" }, "Forma de entrega escolhida: " + p.entrega + (p.retirada ? " (o cliente vem buscar; sem endereço de entrega)" : "") + (p.prazo_dias !== null && p.prazo_dias !== undefined ? " (previsão: " + p.prazo_dias + " dias úteis)" : "")));
+    corpo.appendChild(h("div", { class: "barra" }, h("button", { class: "btn sec mini", type: "button", onclick: function () { copiar(textoEnd); } }, p.retirada ? "Copiar dados do cliente" : "Copiar endereço")));
 
     corpo.appendChild(h("h2", null, "Itens"));
     p.itens.forEach(function (i) { corpo.appendChild(h("div", { class: "linha-ped" }, h("span", null, i.qtd + "× " + i.nome + (i.promocao ? " (promoção)" : "")), h("span", null, reais(i.unitario * i.qtd)))); });
@@ -566,9 +572,9 @@
 
     if (proximos.length) {
       corpo.appendChild(h("h2", null, "Próximo passo"));
-      if (proximos.indexOf("enviado") >= 0) corpo.appendChild(h("div", null, h("label", null, "Código de rastreio (obrigatório para marcar como enviado)"), rastreio));
+      if (proximos.indexOf("enviado") >= 0 && !p.retirada) corpo.appendChild(h("div", null, h("label", null, "Código de rastreio (obrigatório para marcar como enviado)"), rastreio));
       corpo.appendChild(h("div", { class: "barra" }, proximos.map(function (n) {
-        return h("button", { class: "btn mini" + (n === "cancelado" || n === "reembolsado" ? " perigo" : n === "enviado" || n === "em_producao" || n === "entregue" ? "" : " sec"), type: "button", onclick: function () { mudar(n); } }, ROTULO_ACAO[n]);
+        return h("button", { class: "btn mini" + (n === "cancelado" || n === "reembolsado" ? " perigo" : n === "enviado" || n === "pronto_retirada" || n === "em_producao" || n === "entregue" ? "" : " sec"), type: "button", onclick: function () { mudar(n); } }, (p.retirada && n === "entregue") ? "Marcar como retirado" : ROTULO_ACAO[n]);
       })));
     } else if (p.rastreio) corpo.appendChild(h("p", null, "Rastreio: " + p.rastreio));
 
@@ -767,6 +773,14 @@
       email: h("input", { type: "text", maxlength: "120", value: c.email || "" }),
       dias: h("input", { type: "number", min: "0", max: "60", value: c.prazo_producao_dias_uteis }),
       envio: h("input", { type: "number", min: "0", max: "30", value: c.prazo_postagem_dias_uteis === undefined ? 2 : c.prazo_postagem_dias_uteis }),
+      retAtiva: h("input", { type: "checkbox", checked: !!(c.retirada && c.retirada.ativa) }),
+      retNome: h("input", { type: "text", maxlength: "40", value: (c.retirada && c.retirada.nome) || "Retirada no local" }),
+      retEnd: h("input", { type: "text", maxlength: "200", value: (c.retirada && c.retirada.endereco) || "", placeholder: "Ex.: Rua das Palmeiras, 123 - Centro, Vila Velha/ES" }),
+      retInstr: h("input", { type: "text", maxlength: "300", value: (c.retirada && c.retirada.instrucoes) || "", placeholder: "Ex.: Seg a sex, das 9h às 17h. Toque o interófone." }),
+      retCeps: h("input", { type: "text", value: ((c.retirada && c.retirada.ceps) || []).join(", "), placeholder: "Ex.: 29100, 29101 (vazio = qualquer CEP)" }),
+      avEmails: h("input", { type: "text", value: ((c.aviso_loja && c.aviso_loja.emails) || []).join(", "), placeholder: "Ex.: loja@email.com, outro@email.com" }),
+      avPagar: h("input", { type: "checkbox", checked: !c.aviso_loja || c.aviso_loja.ao_pagar !== false }),
+      avCriar: h("input", { type: "checkbox", checked: !!(c.aviso_loja && c.aviso_loja.ao_criar) }),
       gratis: h("input", { type: "text", inputmode: "decimal", value: c.frete_gratis_acima ? Number(c.frete_gratis_acima).toFixed(2).replace(".", ",") : "", placeholder: "Vazio = não tem" }),
       cxAlt: h("input", { type: "text", inputmode: "decimal", value: String((c.embalagem_padrao || {}).altura || 10).replace(".", ",") }),
       cxLarg: h("input", { type: "text", inputmode: "decimal", value: String((c.embalagem_padrao || {}).largura || 12).replace(".", ",") }),
@@ -841,6 +855,8 @@
         loja: f.loja.value, slogan: f.slogan.value, whatsapp: f.whatsapp.value, instagram: f.instagram.value, email: f.email.value,
         prazo_producao_dias_uteis: Number(f.dias.value), prazo_postagem_dias_uteis: Number(f.envio.value || 0), frete_provisorio: lerReais(f.frete.value || "0"), aviso_prazo: f.aviso.value,
         frete_gratis_acima: f.gratis.value.trim() ? lerReais(f.gratis.value) : 0,
+        retirada: { ativa: f.retAtiva.checked, nome: f.retNome.value, endereco: f.retEnd.value, instrucoes: f.retInstr.value, ceps: f.retCeps.value.split(/[\s,;]+/).filter(Boolean) },
+        aviso_loja: { emails: f.avEmails.value.split(/[\s,;]+/).filter(Boolean), ao_criar: f.avCriar.checked, ao_pagar: f.avPagar.checked },
         embalagem_padrao: { altura: lerReais(f.cxAlt.value), largura: lerReais(f.cxLarg.value), comprimento: lerReais(f.cxComp.value) },
         frete_regioes: estado.regioes.filter(function (r) { return r.nome.trim() || r.ufs.trim(); }).map(function (r) { return { nome: r.nome, ufs: r.ufs.split(/[\s,;]+/).filter(Boolean), preco: lerReais(r.preco || "0"), prazo: String(r.prazo).trim() === "" ? null : Number(r.prazo) }; }),
         faixa_avisos: f.faixa.value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean),
@@ -861,11 +877,19 @@
       h("div", { class: "grade2" }, campo("Dias úteis a somar ao prazo de transporte", f.dias, "Margem de segurança: somada automaticamente ao transporte de cada entrega, e o cliente vê um prazo único contado a partir do envio. Ex.: transporte 2 + margem 3 = “em até 5 dias úteis após o envio”."), campo("Frete único (R$)", f.frete, "Usado só se não houver nenhuma região cadastrada. Cupom de frete grátis zera.")),
       campo("Aviso de prazo", f.aviso, "Aparece na vitrine, no produto e no carrinho."),
       secao("Entrega e frete", "Por enquanto o frete é por região (valor fixo). O cálculo automático pelo Melhor Envio entra depois. O cliente informa o CEP e escolhe uma das opções do estado dele."),
-      (!estado.regioes.length && !Number(c.frete_provisorio) ? h("div", { class: "alerta" }, "⚠ Nenhum frete configurado: os pedidos sairão com frete R$ 0,00. Cadastre as regiões ou o frete único.") : null),
+      (!estado.regioes.length && !Number(c.frete_provisorio) && !(c.retirada && c.retirada.ativa) ? h("div", { class: "alerta" }, "⚠ Nenhum frete configurado: os pedidos sairão com frete R$ 0,00. Cadastre as regiões ou o frete único.") : null),
       regBox,
       h("button", { class: "btn sec mini", type: "button", onclick: function () { if (estado.regioes.length < 20) { estado.regioes.push({ nome: "", ufs: "", preco: "", prazo: "" }); mostrarRegioes(); } } }, "+ Adicionar região"),
       h("div", { class: "grade2" }, campo("Frete grátis a partir de (R$)", f.gratis, "Pedidos com produtos a partir deste valor não pagam entrega."), h("div")),
       h("div", { class: "grade3" }, campo("Caixa padrão: altura (cm)", f.cxAlt, "Usada nos produtos sem medidas próprias."), campo("Largura (cm)", f.cxLarg), campo("Comprimento (cm)", f.cxComp)),
+      secao("Retirada no local", "Opção para quem mora perto: o cliente escolhe “retirada” no fechamento da compra, não paga frete e não informa endereço. Quando o pedido estiver pronto, você marca no painel e ele recebe o aviso por e-mail com o endereço."),
+      h("label", { class: "chk" }, f.retAtiva, "Oferecer retirada no local"),
+      h("div", { class: "grade2" }, campo("Nome da opção", f.retNome), campo("Endereço da retirada", f.retEnd, "Aparece no fechamento da compra e no e-mail “pronto para retirada”.")),
+      h("div", { class: "grade2" }, campo("Instruções (horário, referência...)", f.retInstr), campo("CEPs que podem retirar (opcional)", f.retCeps, "Começo do CEP, separado por vírgula. Vazio = qualquer CEP vê a opção.")),
+      secao("Avisos por e-mail para a loja", "Receba um e-mail quando entrar um pedido, para responder rápido. Ao clicar em “responder”, a resposta vai direto para o cliente. O aviso só é enviado quando o envio de e-mails estiver ativo."),
+      campo("E-mails que recebem o aviso (até 3)", f.avEmails, "Separe por vírgula."),
+      h("label", { class: "chk" }, f.avPagar, "Avisar quando o pagamento for confirmado (recomendado)"),
+      h("label", { class: "chk" }, f.avCriar, "Avisar também quando um pedido for feito, antes do pagamento (pode gerar avisos de pedidos que não serão pagos)"),
       secao("Faixa de avisos do topo", "Uma frase por linha (até 5). Se houver mais de uma, elas se alternam."),
       f.faixa,
       secao("Benefícios", "Os ícones abaixo da primeira imagem (até 4). Deixe o título vazio para esconder."),

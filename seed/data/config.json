@@ -41,5 +41,19 @@
     "imagem": "assets/placeholder.svg"
   },
   "depoimentos": [],
-  "prazo_postagem_dias_uteis": 2
+  "prazo_postagem_dias_uteis": 2,
+  "retirada": {
+    "ativa": false,
+    "nome": "Retirada no local",
+    "endereco": "",
+    "instrucoes": "",
+    "ceps": []
+  },
+  "aviso_loja": {
+    "emails": [
+      "meltyvelas@gmail.com"
+    ],
+    "ao_criar": false,
+    "ao_pagar": true
+  }
 }

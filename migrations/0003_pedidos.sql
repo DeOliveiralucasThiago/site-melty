@@ -3,7 +3,7 @@
 CREATE TABLE pedidos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   token TEXT NOT NULL UNIQUE,                  -- 32 caracteres aleatórios: é o "link secreto" de acompanhamento
-  status TEXT NOT NULL CHECK (status IN ('aguardando_pagamento','pago','em_producao','enviado','entregue','cancelado','reembolsado')),
+  status TEXT NOT NULL CHECK (status IN ('aguardando_pagamento','pago','em_producao','enviado','pronto_retirada','entregue','cancelado','reembolsado')),
   cliente_nome TEXT NOT NULL,
   cliente_email TEXT NOT NULL,
   cliente_telefone TEXT NOT NULL,

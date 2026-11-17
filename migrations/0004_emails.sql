@@ -5,8 +5,9 @@ ALTER TABLE pedidos ADD COLUMN url_base TEXT NOT NULL DEFAULT '';
 CREATE TABLE emails (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   pedido_id INTEGER NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
-  tipo TEXT NOT NULL,                              -- recebido, pago, enviado, entregue, cancelado, expirado, reembolsado
+  tipo TEXT NOT NULL,                              -- recebido, pago, enviado, pronto_retirada, entregue, cancelado, expirado, reembolsado, loja_novo, loja_pago
   para TEXT NOT NULL,
+  responder_para TEXT NOT NULL DEFAULT '',          -- quem recebe a resposta (nos avisos à loja, o cliente)
   assunto TEXT NOT NULL,
   html TEXT NOT NULL,
   texto TEXT NOT NULL,
@@ -20,6 +21,6 @@ CREATE TABLE emails (
   atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
   enviado_em TEXT
 );
--- Cada tipo de e-mail sai uma vez por pedido (avisos repetidos do provedor de pagamento não duplicam)
-CREATE UNIQUE INDEX idx_emails_pedido_tipo ON emails(pedido_id, tipo);
+-- Cada tipo de e-mail sai uma vez por pedido e destinatário (avisos repetidos do provedor de pagamento não duplicam)
+CREATE UNIQUE INDEX idx_emails_pedido_tipo ON emails(pedido_id, tipo, para);
 CREATE INDEX idx_emails_status ON emails(status, atualizado_em);
