@@ -856,7 +856,7 @@
       secao("Contato"),
       h("div", { class: "grade3" }, campo("WhatsApp", f.whatsapp, "Com 55 e DDD, só números."), campo("Instagram", f.instagram, "Só o usuário, sem @."), campo("E-mail", f.email)),
       secao("Prazo de entrega"),
-      h("div", { class: "grade2" }, campo("Dias úteis de preparo do pedido", f.dias, "Somados automaticamente ao prazo de transporte de cada entrega: o cliente vê um prazo único. Ex.: transporte 2 + preparo 3 = “em até 5 dias úteis”."), campo("Frete único (R$)", f.frete, "Usado só se não houver nenhuma região cadastrada. Cupom de frete grátis zera.")),
+      h("div", { class: "grade2" }, campo("Dias úteis a somar ao prazo de transporte", f.dias, "Margem de segurança: somada automaticamente ao transporte de cada entrega, e o cliente vê um prazo único contado a partir do envio. Ex.: transporte 2 + margem 3 = “em até 5 dias úteis após o envio”."), campo("Frete único (R$)", f.frete, "Usado só se não houver nenhuma região cadastrada. Cupom de frete grátis zera.")),
       campo("Aviso de prazo", f.aviso, "Aparece na vitrine, no produto e no carrinho."),
       secao("Entrega e frete", "Por enquanto o frete é por região (valor fixo). O cálculo automático pelo Melhor Envio entra depois. O cliente informa o CEP e escolhe uma das opções do estado dele."),
       (!estado.regioes.length && !Number(c.frete_provisorio) ? h("div", { class: "alerta" }, "⚠ Nenhum frete configurado: os pedidos sairão com frete R$ 0,00. Cadastre as regiões ou o frete único.") : null),

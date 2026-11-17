@@ -402,7 +402,7 @@
     }
     function textoPrazo(o) {
       if (o.prazo_dias_uteis === null || o.prazo_dias_uteis === undefined) return "";
-      return "Entrega em até " + o.prazo_dias_uteis + " dias úteis, contados da confirmação do pagamento";
+      return "Entrega em até " + o.prazo_dias_uteis + " dias úteis após o envio";
     }
     function desenharOpcoes() {
       var box = $("entrega");
@@ -495,7 +495,7 @@
       if (p.status === "reembolsado") aviso = '<div class="notice">O pagamento deste pedido foi reembolsado.</div>';
       if (p.status === "aguardando_pagamento") aviso = '<div class="notice"><strong>Falta pagar.</strong> Reservamos seus itens até ' + esc(quando(p.expira_em)) + '. <p><a class="btn" href="' + esc(p.pagamento_url) + '">Pagar agora</a></p></div>';
       var rastreio = p.rastreio ? '<div class="notice"><strong>Código de rastreio:</strong> ' + esc(p.rastreio) + ' · <a href="' + esc(p.rastreio_url) + '" target="_blank" rel="noopener">acompanhar a entrega</a></div>' : "";
-      app.innerHTML = '<div class="wrap page"><h1>Pedido #' + p.numero + "</h1><p class='muted'>Olá, " + esc(p.primeiro_nome) + "! Entrega em " + esc(p.cidade) + "/" + esc(p.uf) + (p.entrega ? " · " + esc(p.entrega) + (p.prazo_dias !== null && p.prazo_dias !== undefined ? " (previsão: até " + p.prazo_dias + " dias úteis, contados da confirmação do pagamento)" : "") : "") + ".</p>" +
+      app.innerHTML = '<div class="wrap page"><h1>Pedido #' + p.numero + "</h1><p class='muted'>Olá, " + esc(p.primeiro_nome) + "! Entrega em " + esc(p.cidade) + "/" + esc(p.uf) + (p.entrega ? " · " + esc(p.entrega) + (p.prazo_dias !== null && p.prazo_dias !== undefined ? " (previsão: até " + p.prazo_dias + " dias úteis após o envio)" : "") : "") + ".</p>" +
         aviso + rastreio + etapas +
         "<h2>Itens</h2>" + p.itens.map(function (i) { return '<div class="linha-res"><span>' + i.qtd + "× " + esc(i.nome) + "</span><span>" + brl.format(i.subtotal) + "</span></div>"; }).join("") +
         '<div class="linha-res"><span>Subtotal</span><span>' + brl.format(p.subtotal) + "</span></div>" +

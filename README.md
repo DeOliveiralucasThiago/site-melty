@@ -33,7 +33,7 @@ Fluxo: carrinho → `checkout.html` (dados, endereço, cupom) → `POST /api/ped
   o formato do pagamento (inclui CPF do pagador?) e qual API usar (Preferences x Orders). Sem provedor, a loja mantém o botão de WhatsApp.
 - **Frete (Fase 4, parte sem Melhor Envio):** o cliente informa o CEP e escolhe a entrega; o servidor monta o pacote a partir dos produtos (peso e medidas, ou a
   caixa padrão; itens empilhados) e cota por região (valor fixo por estado, configurado em Painel > Textos e contato), com opção de frete grátis acima de um valor.
-  O estado vem do CEP (faixas em `functions/_lib/frete.js`, conferir antes de publicar). O prazo mostrado ao cliente é **único**: transporte + dias de preparo do pedido (somados pelo sistema), contado da confirmação do pagamento. Não se fala em "produção" para o cliente.
+  O estado vem do CEP (faixas em `functions/_lib/frete.js`, conferir antes de publicar). O prazo mostrado ao cliente é **único**: transporte + uma margem de dias (configurável, somada pelo sistema), **contado a partir do envio** (postagem). Não se fala em "produção" nem em prazo desde o pagamento para o cliente.
   O **Melhor Envio** entra no mesmo encaixe (`cotarFrete`), devolvendo opções no mesmo formato. Falta o token e conferir a documentação.
 
 ## E-mails automáticos (Fase 5)

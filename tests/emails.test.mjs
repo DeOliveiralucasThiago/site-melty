@@ -48,7 +48,7 @@ t("'pago' diz que o pedido será separado e enviado em breve, sem falar em produ
 await db.prepare("UPDATE pedidos SET frete_prazo_dias = 5 WHERE token = ?").bind(r1.token).run();
 await enfileirar(db, await idDe(r1.token), "pago", { env, forcar: true });
 const pago2 = (await emailsDe(r1.token)).find((e) => e.tipo === "pago");
-t("com previsão conhecida, 'pago' informa o prazo único (em até 5 dias úteis, da confirmação do pagamento)", pago2.html.includes("em até <b>5 dias úteis</b>") && pago2.html.includes("contados da confirmação do pagamento") && pago2.texto.includes("em até 5 dias úteis"), pago2.html.slice(pago2.html.indexOf("Previs"), pago2.html.indexOf("Previs") + 160));
+t("com previsão conhecida, 'pago' informa o prazo único (em até 5 dias úteis após o envio)", pago2.html.includes("em até <b>5 dias úteis</b>") && pago2.html.includes("após o envio do pedido") && pago2.texto.includes("em até 5 dias úteis"), pago2.html.slice(pago2.html.indexOf("Previs"), pago2.html.indexOf("Previs") + 160));
 await db.prepare("UPDATE pedidos SET frete_prazo_dias = NULL WHERE token = ?").bind(r1.token).run();
 
 // ---- enviado, entregue ----

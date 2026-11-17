@@ -63,11 +63,11 @@ export function montarEmail(tipo, ctx) {
     assunto = `Pagamento confirmado: pedido #${num}`;
     titulo = `Pagamento confirmado, ${nome}!`;
     const prev = pedido.frete_prazo_dias;
-    const previsao = prev !== null && prev !== undefined ? `Previsão de entrega: em até <b>${prev} dias úteis</b>, contados da confirmação do pagamento.` : "";
+    const previsao = prev !== null && prev !== undefined ? `Previsão de entrega: em até <b>${prev} dias úteis</b> após o envio do pedido.` : "";
     paragrafos = [`Recebemos o pagamento do pedido <b>#${num}</b>. Em breve o seu pedido será separado e enviado. Assim que for postado, enviamos o código de rastreio por aqui.`,
       previsao, c.aviso_prazo ? `<span style="color:#75656a;font-size:14px">${esc(c.aviso_prazo)}</span>` : ""].filter(Boolean);
     paragrafosTxt = [`Pagamento confirmado, ${nomeTxt}! Recebemos o pagamento do pedido #${num}. Em breve o seu pedido será separado e enviado. Assim que for postado, enviamos o código de rastreio.`,
-      prev !== null && prev !== undefined ? `Previsão de entrega: em até ${prev} dias úteis, contados da confirmação do pagamento.` : "", c.aviso_prazo || ""];
+      prev !== null && prev !== undefined ? `Previsão de entrega: em até ${prev} dias úteis após o envio do pedido.` : "", c.aviso_prazo || ""];
   } else if (tipo === "enviado") {
     assunto = `Seu pedido #${num} está a caminho`;
     titulo = `Seu pedido está a caminho, ${nome}!`;

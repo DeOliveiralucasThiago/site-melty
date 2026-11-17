@@ -54,13 +54,13 @@ t("abaixo do limite continua cobrando", q.opcoes[0].preco_centavos === 1500 && !
 await setCfg("frete_gratis_acima", 0);
 await setCfg("prazo_producao_dias_uteis", 3);
 q = await cotarFrete(db, env, { cep: "29100000", linhas: linhas(1), subtotal_centavos: 7990 });
-t("prazo único = transporte + preparo (3+3=6 e 1+3=4)", q.preparo_dias === 3 && q.opcoes[0].transporte_dias === 3 && q.opcoes[0].prazo_dias_uteis === 6 && q.opcoes[1].prazo_dias_uteis === 4, JSON.stringify(q.opcoes));
+t("prazo único = transporte + margem (3+3=6 e 1+3=4)", q.preparo_dias === 3 && q.opcoes[0].transporte_dias === 3 && q.opcoes[0].prazo_dias_uteis === 6 && q.opcoes[1].prazo_dias_uteis === 4, JSON.stringify(q.opcoes));
 await setCfg("prazo_producao_dias_uteis", 2);
 q = await cotarFrete(db, env, { cep: "29100000", linhas: linhas(1), subtotal_centavos: 7990 });
-t("mudando o preparo para 2 dias, o prazo se ajusta sozinho (5 e 3)", q.opcoes[0].prazo_dias_uteis === 5 && q.opcoes[1].prazo_dias_uteis === 3);
+t("mudando a margem para 2 dias, o prazo se ajusta sozinho (5 e 3)", q.opcoes[0].prazo_dias_uteis === 5 && q.opcoes[1].prazo_dias_uteis === 3);
 await setCfg("prazo_producao_dias_uteis", 0);
 q = await cotarFrete(db, env, { cep: "29100000", linhas: linhas(1), subtotal_centavos: 7990 });
-t("sem dias de preparo, o prazo é só o do transporte", q.opcoes[0].prazo_dias_uteis === 3);
+t("sem margem, o prazo é só o do transporte", q.opcoes[0].prazo_dias_uteis === 3);
 await setCfg("frete_regioes", [{ nome: "Sem prazo", ufs: ["ES"], preco: 10, prazo: null }, { nome: "Entrega ES", ufs: ["SP"], preco: 15, prazo: 3 }, { nome: "Sudeste", ufs: ["SP", "RJ", "MG"], preco: 25.5, prazo: 5 }, { nome: "Entrega expressa", ufs: ["ES", "RJ"], preco: 40, prazo: 1 }]);
 await setCfg("prazo_producao_dias_uteis", 3);
 q = await cotarFrete(db, env, { cep: "29100000", linhas: linhas(1), subtotal_centavos: 7990 });
@@ -74,7 +74,7 @@ await setCfg("frete_regioes", [
 // ---- pedido com a forma de entrega ----
 const r1 = await pedir(0, [{ id: "bamboo-dreams", qtd: 1 }], { frete_id: "regiao:entrega-expressa" });
 const p1 = await db.prepare("SELECT * FROM pedidos WHERE token = ?").bind(r1.token).first();
-t("pedido guarda a forma de entrega, o preço e a previsão (transporte 1 + preparo 3 = 4)", p1.frete_servico === "Entrega expressa" && p1.frete_id === "regiao:entrega-expressa" && p1.frete_centavos === 4000 && p1.frete_prazo_dias === 4 && p1.total_centavos === 7990 + 4000, JSON.stringify(p1));
+t("pedido guarda a forma de entrega, o preço e a previsão (transporte 1 + margem 3 = 4)", p1.frete_servico === "Entrega expressa" && p1.frete_id === "regiao:entrega-expressa" && p1.frete_centavos === 4000 && p1.frete_prazo_dias === 4 && p1.total_centavos === 7990 + 4000, JSON.stringify(p1));
 t("com 2 opções, precisa escolher", (await cod(() => pedir(1, [{ id: "cereja-avela", qtd: 1 }]))) === "frete");
 t("opção inexistente é recusada", (await cod(() => pedir(1, [{ id: "cereja-avela", qtd: 1 }], { frete_id: "regiao:inventada" }))) === "frete");
 t("opção de OUTRA região é recusada (SP não tem 'Entrega ES')", (await cod(() => pedir(1, [{ id: "cereja-avela", qtd: 1 }], { cep: "01001-000", uf: "SP", frete_id: "regiao:entrega-es" }))) === "frete");

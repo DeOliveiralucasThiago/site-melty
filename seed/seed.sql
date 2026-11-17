@@ -24,8 +24,8 @@ INSERT INTO paginas (slug, titulo, conteudo) VALUES ('politica-de-privacidade', 
 <h3>Por quanto tempo guardamos</h3><p>Pelo tempo necessário para a entrega, garantia e obrigações legais. Depois disso, os dados são apagados ou anonimizados.</p>
 <h3>Seus direitos</h3><p>Você pode pedir a confirmação do tratamento, acesso, correção, anonimização ou exclusão dos seus dados, entre outros direitos da LGPD (Lei 13.709/2018). Escreva para {{email}}.</p>
 <h3>Cookies e armazenamento local</h3><p>Guardamos no seu navegador apenas o conteúdo do carrinho e o último pedido, para a loja funcionar. Não usamos cookies de publicidade.</p>');
-INSERT INTO paginas (slug, titulo, conteudo) VALUES ('prazos-e-envio', 'Prazos e Envio', '<h3>Separação e envio</h3><p>Depois que o pagamento é confirmado, separamos o seu pedido e o enviamos o quanto antes. Você recebe um e-mail quando ele for postado, com o código de rastreio.</p>
-<h3>Prazo de entrega</h3><p>O prazo mostrado na hora da compra depende do seu CEP e da forma de entrega escolhida, e já inclui a separação e o envio do pedido. Ele é contado em dias úteis a partir da confirmação do pagamento.</p>
+INSERT INTO paginas (slug, titulo, conteudo) VALUES ('prazos-e-envio', 'Prazos e Envio', '<h3>Separação e envio</h3><p>Depois que o pagamento é confirmado, separamos o seu pedido e o enviamos em breve. Você recebe um e-mail quando ele for postado, com o código de rastreio.</p>
+<h3>Prazo de entrega</h3><p>O prazo mostrado na hora da compra depende do seu CEP e da forma de entrega escolhida. Ele é contado em dias úteis <strong>a partir do envio</strong> do pedido (a postagem).</p>
 <h3>Importante saber</h3><p>{{aviso_prazo}}</p>
 <h3>Imprevistos</h3><p>Greves, feriados, clima ou áreas de difícil acesso podem afetar a entrega. Nesses casos, acompanhamos o rastreio e ajudamos você a resolver.</p>
 <h3>Rastreamento</h3><p>Você acompanha o pedido pelo link que enviamos por e-mail e, depois da postagem, pelo código de rastreio.</p>
@@ -43,7 +43,7 @@ INSERT INTO config (chave, valor) VALUES ('instagram', '"meltyvelas"');
 INSERT INTO config (chave, valor) VALUES ('email', '"meltyvelas@gmail.com"');
 INSERT INTO config (chave, valor) VALUES ('frete_provisorio', '0');
 INSERT INTO config (chave, valor) VALUES ('prazo_producao_dias_uteis', '3');
-INSERT INTO config (chave, valor) VALUES ('aviso_prazo', '"O prazo de entrega é uma estimativa, contada a partir da confirmação do pagamento, e já inclui a separação e o envio do pedido. Pode variar conforme a região e imprevistos dos Correios."');
+INSERT INTO config (chave, valor) VALUES ('aviso_prazo', '"O prazo é estimado e começa a contar após a postagem do pedido. Pode variar conforme a região e imprevistos dos Correios."');
 INSERT INTO config (chave, valor) VALUES ('faixa_avisos', '["Velas aromáticas artesanais, feitas com carinho","Frete calculado pelo seu CEP"]');
 INSERT INTO config (chave, valor) VALUES ('beneficios', '[{"icone":"mao","titulo":"Feito à mão","texto":"Cada vela é preparada com cuidado"},{"icone":"cartao","titulo":"Pix e cartão","texto":"Pagamento online seguro"},{"icone":"caixa","titulo":"Envio para todo o Brasil","texto":"Frete calculado pelo seu CEP"},{"icone":"zap","titulo":"Ficou em dúvida?","texto":"Chama no WhatsApp"}]');
 INSERT INTO config (chave, valor) VALUES ('quem_somos', '{"titulo":"Quem somos","textos":["A Melty nasceu do gosto por transformar momentos simples em momentos aconchegantes.","Cada vela é feita à mão, com atenção aos detalhes, para deixar a sua casa com a sua cara."],"imagem_id":null}');

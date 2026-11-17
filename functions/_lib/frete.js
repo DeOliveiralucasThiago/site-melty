@@ -48,8 +48,8 @@ const slug = (t) => String(t).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
  * Opções de entrega para um CEP.
  * entrada: { cep, linhas (itens do pedido calculado), subtotal_centavos }
  * saída: { uf, preparo_dias, pacote, opcoes: [{ id, servico, transportadora, preco_centavos, transporte_dias, prazo_dias_uteis, gratis }] }
- * prazo_dias_uteis é o que o cliente vê: transporte + dias de preparo do pedido (config prazo_producao_dias_uteis), contados da confirmação do pagamento.
- * Com o Melhor Envio, "transporte_dias" será o prazo devolvido por eles e o preparo é somado da mesma forma.
+ * prazo_dias_uteis é o que o cliente vê: transporte + uma margem de dias (config prazo_producao_dias_uteis), contado a partir do ENVIO (postagem).
+ * Com o Melhor Envio, "transporte_dias" será o prazo devolvido por eles e a margem é somada da mesma forma.
  */
 export async function cotarFrete(db, env, { cep, linhas, subtotal_centavos }) {
   const c = await cfg(db, ["frete_regioes", "frete_provisorio", "frete_gratis_acima", "embalagem_padrao", "prazo_producao_dias_uteis"]);
