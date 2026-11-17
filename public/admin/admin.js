@@ -3,7 +3,7 @@
   "use strict";
 
   var raiz = document.getElementById("raiz");
-  var S = { produtos: [], categorias: [], banners: [], config: {} };
+  var S = { produtos: [], categorias: [], banners: [], cupons: [], config: {} };
   var abaAtual = "produtos";
 
   /* ---------- utilidades de interface ---------- */
@@ -192,11 +192,11 @@
   }
 
   /* ---------- estrutura geral ---------- */
-  var ABAS = [["produtos", "Produtos"], ["categorias", "Categorias"], ["banners", "Banners"], ["textos", "Textos e contato"]];
+  var ABAS = [["produtos", "Produtos"], ["categorias", "Categorias"], ["banners", "Banners"], ["cupons", "Cupons"], ["textos", "Textos e contato"]];
 
   function carregarTudo() {
-    return Promise.all([api("GET", "/produtos"), api("GET", "/categorias"), api("GET", "/banners"), api("GET", "/config")]).then(function (v) {
-      S.produtos = v[0]; S.categorias = v[1]; S.banners = v[2]; S.config = v[3];
+    return Promise.all([api("GET", "/produtos"), api("GET", "/categorias"), api("GET", "/banners"), api("GET", "/config"), api("GET", "/cupons")]).then(function (v) {
+      S.produtos = v[0]; S.categorias = v[1]; S.banners = v[2]; S.config = v[3]; S.cupons = v[4];
     });
   }
 
@@ -214,7 +214,7 @@
       return h("button", { role: "tab", "aria-selected": abaAtual === a[0] ? "true" : "false", onclick: function () { abaAtual = a[0]; desenhar(); } }, a[1]);
     })));
     raiz.appendChild(main);
-    ({ produtos: abaProdutos, categorias: abaCategorias, banners: abaBanners, textos: abaTextos })[abaAtual](main);
+    ({ produtos: abaProdutos, categorias: abaCategorias, banners: abaBanners, cupons: abaCupons, textos: abaTextos })[abaAtual](main);
   }
   function recarregar() { return carregarTudo().then(desenhar); }
 
@@ -257,13 +257,15 @@
       limpar(etq);
       if (!p.ativo) etq.appendChild(h("span", { class: "etq cinza" }, "Oculto"));
       if (p.estoque === 0) etq.appendChild(h("span", { class: "etq vermelha" }, "Esgotado"));
+      if (p.promocao_vigente) etq.appendChild(h("span", { class: "etq" }, "Promoção"));
+      else if (p.preco_promo) etq.appendChild(h("span", { class: "etq cinza" }, "Promoção agendada/encerrada"));
       if (p.novidade) etq.appendChild(h("span", { class: "etq" }, "Novidade"));
       if (p.destaque) etq.appendChild(h("span", { class: "etq" }, "Mais vendida"));
     }
     etiquetas();
     return h("div", { class: "cartao" }, h("div", { class: "linha" },
       p.imagens.length ? h("img", { src: foto(p.imagens[0]), alt: "" }) : h("div", { class: "miniatura" }),
-      h("div", null, h("div", { class: "nome" }, p.nome, etq), h("div", { class: "meta" }, reais(p.preco) + " · " + nomeCategoria(p.categoria))),
+      h("div", null, h("div", { class: "nome" }, p.nome, etq), h("div", { class: "meta" }, (p.preco_promo ? reais(p.preco) + " → promo " + reais(p.preco_promo) : reais(p.preco)) + " · " + nomeCategoria(p.categoria))),
       h("div", { class: "acoes extra" },
         h("div", { class: "estoque" }, h("span", { class: "meta" }, "Estoque"),
           h("button", { type: "button", "aria-label": "Diminuir estoque", onclick: function () { salvarEstoque(p.estoque - 1); } }, "−"), entrada,
@@ -273,7 +275,7 @@
 
   function formProduto(p) {
     var novo = !p;
-    var d = p || { nome: "", descricao: "", preco: "", estoque: 1, categoria: S.categorias.length ? S.categorias[0].id : "", peso_kg: 0.42, imagens: [], novidade: false, destaque: false, ativo: true, ordem: S.produtos.length };
+    var d = p || { nome: "", descricao: "", preco: "", estoque: 1, categoria: S.categorias.length ? S.categorias[0].id : "", peso_kg: 0.42, preco_promo: null, promo_inicio: "", promo_fim: "", imagens: [], novidade: false, destaque: false, ativo: true, ordem: S.produtos.length };
     var imagens = d.imagens.slice();
     var dlg = h("dialog");
     var f = {
@@ -283,6 +285,9 @@
       preco: h("input", { type: "text", inputmode: "decimal", required: true, value: d.preco === "" ? "" : Number(d.preco).toFixed(2).replace(".", ","), placeholder: "79,90" }),
       estoque: h("input", { type: "number", min: "0", max: "9999", required: true, value: d.estoque }),
       peso: h("input", { type: "text", inputmode: "decimal", value: String(d.peso_kg).replace(".", ",") }),
+      promo: h("input", { type: "text", inputmode: "decimal", value: d.preco_promo ? Number(d.preco_promo).toFixed(2).replace(".", ",") : "", placeholder: "Opcional" }),
+      promoIni: h("input", { type: "date", value: d.promo_inicio || "" }),
+      promoFim: h("input", { type: "date", value: d.promo_fim || "" }),
       ordem: h("input", { type: "number", min: "0", max: "9999", value: d.ordem }),
       ativo: h("input", { type: "checkbox", checked: d.ativo }),
       novidade: h("input", { type: "checkbox", checked: d.novidade }),
@@ -310,6 +315,7 @@
       var corpo = {
         nome: f.nome.value, categoria: f.categoria.value || null, preco: lerReais(f.preco.value), estoque: Number(f.estoque.value),
         peso_kg: lerReais(f.peso.value || "0,42"), ordem: Number(f.ordem.value || 0), descricao: editor.obter(),
+        preco_promo: f.promo.value.trim() ? lerReais(f.promo.value) : null, promo_inicio: f.promoIni.value || null, promo_fim: f.promoFim.value || null,
         ativo: f.ativo.checked, novidade: f.novidade.checked, destaque: f.destaque.checked, imagens: imagens
       };
       var salvar = novo ? api("POST", "/produtos", corpo) : api("PUT", "/produtos/" + encodeURIComponent(p.id), corpo);
@@ -318,6 +324,8 @@
       h("h2", null, novo ? "Novo produto" : "Editar produto"),
       campo("Nome", f.nome),
       h("div", { class: "grade2" }, campo("Categoria", f.categoria), campo("Preço (R$)", f.preco)),
+      h("div", { class: "grade3" }, campo("Preço promocional (R$)", f.promo, "Vazio = sem promoção. A loja mostra o preço antigo riscado."),
+        campo("Promoção começa", f.promoIni, "Opcional. Vazio = já valendo."), campo("Promoção termina", f.promoFim, "Último dia. Vazio = sem data para acabar.")),
       h("div", { class: "grade3" }, campo("Estoque", f.estoque), campo("Peso (kg)", f.peso, "Com a embalagem, para o frete."), campo("Posição na loja", f.ordem, "Menor número aparece primeiro.")),
       h("label", null, "Descrição"), editor.el,
       h("p", { class: "dica" }, "Selecione um trecho e use os botões para formatar. Cores disponíveis: as da marca. Fonte e tamanho seguem o padrão da loja."),
@@ -357,6 +365,24 @@
     acao(renumerar(lista, rota)).then(recarregar).catch(function () {});
   }
 
+  function promoCategoria(c) {
+    var pct = h("input", { type: "number", min: "1", max: "90", placeholder: "Ex.: 10", "aria-label": "Desconto em porcentagem" });
+    var ini = h("input", { type: "date", "aria-label": "Início" }), fim = h("input", { type: "date", "aria-label": "Fim" });
+    return h("details", null, h("summary", null, "Promoção em todos os produtos desta categoria"),
+      h("p", { class: "dica" }, "Grava o preço promocional de cada produto (você pode ajustar um por um depois, em Produtos)."),
+      h("div", { class: "grade3" }, h("div", null, h("label", null, "Desconto (%)"), pct), h("div", null, h("label", null, "Começa em (opcional)"), ini), h("div", null, h("label", null, "Termina em (opcional)"), fim)),
+      h("div", { class: "barra" },
+        h("button", { class: "btn mini", type: "button", onclick: function () {
+          if (!pct.value) { aviso("Informe a porcentagem de desconto.", "erro"); return; }
+          if (!confirm("Aplicar " + pct.value + "% de desconto em todos os produtos de “" + c.nome + "”? Promoções que já existirem neles serão substituídas.")) return;
+          acao(api("POST", "/categorias/" + encodeURIComponent(c.id) + "/promocao", { percentual: Number(pct.value), inicio: ini.value || null, fim: fim.value || null }), "Promoção aplicada.").then(recarregar).catch(function () {});
+        } }, "Aplicar desconto"),
+        h("button", { class: "btn perigo mini", type: "button", onclick: function () {
+          if (!confirm("Remover a promoção de todos os produtos de “" + c.nome + "”?")) return;
+          acao(api("POST", "/categorias/" + encodeURIComponent(c.id) + "/promocao", { remover: true }), "Promoções removidas.").then(recarregar).catch(function () {});
+        } }, "Remover promoções")));
+  }
+
   function abaCategorias(main) {
     var nome = h("input", { type: "text", maxlength: "40", placeholder: "Ex.: Home Spray", "aria-label": "Nome da nova categoria" });
     main.appendChild(h("h1", null, "Categorias"));
@@ -374,6 +400,7 @@
       main.appendChild(h("div", { class: "cartao" },
         h("div", { class: "grade2" }, h("div", null, h("label", null, "Nome"), n), h("div", null, h("label", null, "Descrição curta"), desc)),
         h("label", { class: "chk" }, ativa, "Visível na loja e no menu"),
+        promoCategoria(c),
         h("div", { class: "barra" },
           h("span", { class: "meta dica" }, c.total + (c.total === 1 ? " produto" : " produtos")), h("span", { class: "espaco" }),
           h("button", { class: "btn sec mini", type: "button", disabled: i === 0, onclick: function () { mover(S.categorias, i, -1, "/categorias/"); } }, "↑ Subir"),
@@ -423,6 +450,126 @@
             if (!confirm("Excluir este banner?")) return;
             acao(api("DELETE", "/banners/" + b.id), "Banner excluído.").then(recarregar).catch(function () {});
           } }, "Excluir"))));
+    });
+  }
+
+
+  /* ========== CUPONS ========== */
+  var SITUACAO = { ativo: ["Ativo", ""], esgotado: ["Esgotado", "vermelha"], expirado: ["Expirado", "cinza"], desativado: ["Desativado", "cinza"], agendado: ["Agendado", ""] };
+  function dataBR(d) { return d ? d.split("-").reverse().join("/") : ""; }
+  function resumoCupom(c) {
+    var desc = c.tipo === "percentual" ? c.valor + "% de desconto" : c.tipo === "valor" ? reais(c.valor) + " de desconto" : "Frete grátis";
+    var partes = [desc, c.usos_ativos + (c.limite_total ? "/" + c.limite_total : "") + " usos"];
+    if (c.so_primeira_compra) partes.push("primeira compra");
+    if (c.fim) partes.push("até " + dataBR(c.fim));
+    return partes.join(" · ");
+  }
+
+  function abaCupons(main) {
+    main.appendChild(h("h1", null, "Cupons de desconto"));
+    main.appendChild(h("p", { class: "dica" }, "Cada cupom vale uma vez por CPF (e por e-mail), não se soma a outro cupom no mesmo pedido, e o desconto é calculado pelo servidor. Quando o limite de usos acaba, o cupom fica “Esgotado” sozinho. Os cupons passam a valer para os clientes quando o pagamento online for ativado."));
+    main.appendChild(h("div", { class: "barra" }, h("span", { class: "espaco" }), h("button", { class: "btn", onclick: function () { formCupom(null); } }, "+ Novo cupom")));
+    if (!S.cupons.length) main.appendChild(h("p", { class: "vazio" }, "Nenhum cupom ainda."));
+    S.cupons.forEach(function (c) {
+      var sit = SITUACAO[c.situacao] || [c.situacao, "cinza"];
+      main.appendChild(h("div", { class: "cartao" }, h("div", { class: "linha cupom" },
+        h("div", { class: "miniatura sigla" }, "%"),
+        h("div", null, h("div", { class: "nome" }, c.codigo, h("span", { class: "etq " + sit[1] }, sit[0])), h("div", { class: "meta" }, resumoCupom(c))),
+        h("div", { class: "acoes extra" },
+          h("button", { class: "btn sec mini", onclick: function () { usosCupom(c); } }, "Usos"),
+          h("button", { class: "btn sec mini", onclick: function () {
+            acao(api("PATCH", "/cupons/" + c.id, { ativo: !c.ativo }), c.ativo ? "Cupom desativado." : "Cupom ativado.").then(recarregar).catch(function () {});
+          } }, c.ativo ? "Desativar" : "Ativar"),
+          h("button", { class: "btn sec mini", onclick: function () { formCupom(c); } }, "Editar")))));
+    });
+  }
+
+  function dialogo(conteudo) {
+    var dlg = h("dialog");
+    dlg.appendChild(conteudo(dlg));
+    dlg.addEventListener("close", function () { if (dlg.parentNode) dlg.parentNode.removeChild(dlg); });
+    document.body.appendChild(dlg);
+    dlg.showModal();
+    return dlg;
+  }
+
+  function usosCupom(c) {
+    var corpo = h("div", null, h("p", { class: "dica" }, "Carregando…"));
+    dialogo(function (dlg) {
+      return h("form", { method: "dialog" }, h("h2", null, "Usos do cupom " + c.codigo),
+        h("p", { class: "dica" }, "Por privacidade, o painel não mostra CPF nem e-mail."), corpo,
+        h("div", { class: "barra" }, h("button", { class: "btn sec", type: "button", onclick: function () { dlg.close(); } }, "Fechar")));
+    });
+    api("GET", "/cupons/" + c.id + "/usos").then(function (usos) {
+      limpar(corpo);
+      if (!usos.length) { corpo.appendChild(h("p", { class: "vazio" }, "Ainda sem usos.")); return; }
+      var ROT = { reservado: "Aguardando pagamento", consumido: "Pago", liberado: "Liberado (não pago)" };
+      usos.forEach(function (u) { corpo.appendChild(h("div", { class: "cartao" }, h("b", null, ROT[u.situacao] || u.situacao), " · pedido " + u.pedido + " · " + reais(u.desconto) + " · " + u.quando)); });
+    }).catch(function (e) { limpar(corpo); corpo.appendChild(h("p", { class: "erro" }, e.message)); });
+  }
+
+  function formCupom(c) {
+    var novo = !c;
+    var d = c || { codigo: "", tipo: "percentual", valor: 10, limite_total: null, so_primeira_compra: false, valor_minimo: null, inicio: "", fim: "", escopo: "todos", escopo_ids: [], acumula_promocao: false, ativo: true };
+    var f = {
+      codigo: h("input", { type: "text", maxlength: "20", required: true, value: d.codigo, placeholder: "Ex.: BEMVINDO10", disabled: !novo && c.usos_ativos + c.usos_pagos > 0 }),
+      tipo: h("select", null, [["percentual", "Porcentagem (%)"], ["valor", "Valor em reais (R$)"], ["frete", "Frete grátis"]].map(function (x) { return h("option", { value: x[0], selected: x[0] === d.tipo }, x[1]); })),
+      valor: h("input", { type: "text", inputmode: "decimal", value: d.tipo === "valor" ? Number(d.valor).toFixed(2).replace(".", ",") : String(d.valor || "") }),
+      limite: h("input", { type: "number", min: "1", value: d.limite_total || "", placeholder: "Vazio = sem limite" }),
+      minimo: h("input", { type: "text", inputmode: "decimal", value: d.valor_minimo ? Number(d.valor_minimo).toFixed(2).replace(".", ",") : "", placeholder: "Opcional" }),
+      inicio: h("input", { type: "date", value: d.inicio || "" }), fim: h("input", { type: "date", value: d.fim || "" }),
+      escopo: h("select", null, [["todos", "Todos os produtos"], ["categorias", "Só algumas categorias"], ["produtos", "Só alguns produtos"]].map(function (x) { return h("option", { value: x[0], selected: x[0] === d.escopo }, x[1]); })),
+      primeira: h("input", { type: "checkbox", checked: d.so_primeira_compra }),
+      acumula: h("input", { type: "checkbox", checked: d.acumula_promocao }),
+      ativo: h("input", { type: "checkbox", checked: d.ativo })
+    };
+    var escolhidos = {}; (d.escopo_ids || []).forEach(function (i) { escolhidos[i] = true; });
+    var lista = h("div", { class: "lista-escopo" });
+    function rotuloValor() { return f.tipo.value === "percentual" ? "Desconto (%)" : f.tipo.value === "valor" ? "Desconto (R$)" : "—"; }
+    var rotV = h("label", null, rotuloValor());
+    function mostrarEscopo() {
+      limpar(lista);
+      var fonte = f.escopo.value === "categorias" ? S.categorias : f.escopo.value === "produtos" ? S.produtos : [];
+      fonte.forEach(function (x) {
+        var cb = h("input", { type: "checkbox", checked: !!escolhidos[x.id], onchange: function () { escolhidos[x.id] = cb.checked; } });
+        lista.appendChild(h("label", { class: "chk" }, cb, x.nome));
+      });
+    }
+    f.escopo.addEventListener("change", function () { escolhidos = {}; mostrarEscopo(); });
+    f.tipo.addEventListener("change", function () { rotV.textContent = rotuloValor(); f.valor.disabled = f.tipo.value === "frete"; });
+    f.valor.disabled = d.tipo === "frete";
+    mostrarEscopo();
+
+    function campo(r, el, dica) { return h("div", null, h("label", null, r), el, dica ? h("p", { class: "dica" }, dica) : null); }
+    dialogo(function (dlg) {
+      return h("form", { method: "dialog", onsubmit: function (ev) {
+        ev.preventDefault();
+        var corpo = {
+          codigo: f.codigo.value, tipo: f.tipo.value, valor: f.tipo.value === "frete" ? 0 : lerReais(f.valor.value),
+          limite_total: f.limite.value ? Number(f.limite.value) : null, valor_minimo: f.minimo.value.trim() ? lerReais(f.minimo.value) : null,
+          inicio: f.inicio.value || null, fim: f.fim.value || null, escopo: f.escopo.value,
+          escopo_ids: Object.keys(escolhidos).filter(function (k) { return escolhidos[k]; }),
+          so_primeira_compra: f.primeira.checked, acumula_promocao: f.acumula.checked, ativo: f.ativo.checked
+        };
+        if (c && f.codigo.disabled) delete corpo.codigo;
+        acao(novo ? api("POST", "/cupons", corpo) : api("PUT", "/cupons/" + c.id, corpo), "Cupom salvo.").then(function () { dlg.close(); return recarregar(); }).catch(function () {});
+      } },
+        h("h2", null, novo ? "Novo cupom" : "Editar cupom"),
+        campo("Código", f.codigo, f.codigo.disabled ? "Este cupom já foi usado, então o código não muda." : "O cliente digita este código. Letras e números, sem espaço."),
+        h("div", { class: "grade3" }, campo("Tipo", f.tipo), h("div", null, rotV, f.valor), campo("Limite de usos", f.limite, "Ex.: 10. Ao acabar, fica esgotado.")),
+        h("div", { class: "grade3" }, campo("Pedido mínimo (R$)", f.minimo, "Soma dos itens que o cupom alcança."), campo("Vale a partir de", f.inicio), campo("Vale até (inclusive)", f.fim)),
+        campo("Onde vale", f.escopo), lista,
+        h("label", { class: "chk" }, f.primeira, "Só para a primeira compra (confere CPF, e-mail e endereço de quem já comprou)"),
+        h("label", { class: "chk" }, f.acumula, "Também vale sobre produtos já em promoção"),
+        h("label", { class: "chk" }, f.ativo, "Cupom ativo"),
+        h("div", { class: "barra" },
+          h("button", { class: "btn", type: "submit" }, "Salvar"),
+          h("button", { class: "btn sec", type: "button", onclick: function () { dlg.close(); } }, "Cancelar"),
+          h("span", { class: "espaco" }),
+          novo ? null : h("button", { class: "btn perigo", type: "button", onclick: function () {
+            if (!confirm("Excluir o cupom " + c.codigo + "?")) return;
+            acao(api("DELETE", "/cupons/" + c.id), "Cupom excluído.").then(function () { dlg.close(); return recarregar(); }).catch(function () {});
+          } }, "Excluir")));
     });
   }
 

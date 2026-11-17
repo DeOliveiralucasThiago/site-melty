@@ -9,8 +9,16 @@ Loja de velas aromáticas: site público + painel de administração, rodando no
 
 ## O que o painel controla (`/admin/`)
 Produtos (preço, estoque, descrição com formatação — negrito, itálico, listas, subtítulo, link e as cores da marca —, fotos, categoria, "novidade" e "mais vendida"), categorias (viram menu),
-banners do carrossel, textos e contato, benefícios, "Quem somos" e depoimentos. As fotos são reduzidas no
+banners do carrossel, **preço promocional** (por produto, com datas, ou em porcentagem para uma categoria inteira), **cupons de desconto**, textos e contato, benefícios, "Quem somos" e depoimentos. As fotos são reduzidas no
 navegador e guardadas no próprio banco (sem serviço extra, sem cartão cadastrado).
+
+## Preços e cupons (regras no servidor)
+`functions/_lib/cupons.js` calcula o pedido: o navegador só diz quais produtos, quantas unidades e o cupom; o servidor
+recalcula tudo. Regras: 1 cupom por pedido; 1 uso por CPF e por e-mail (o próprio banco impede repetição, mesmo em
+pedidos simultâneos); limite total de usos; reserva por 30 min enquanto o pagamento está pendente (vence sozinha);
+"primeira compra" confere CPF, e-mail e endereço de quem já comprou; cupom não vale sobre item já em promoção
+(salvo opção marcada). CPF e e-mail ficam só como código embaralhado (HMAC com `HASH_SECRET`), nunca abertos.
+Na Fase 3, o pedido deve chamar `calcularPedido` → `reservarCupom` ao criar e `confirmarUso`/`liberarUso` ao pagar/cancelar.
 
 ## Rodar no computador (teste)
 ```bash
@@ -18,6 +26,7 @@ npm install
 cp .dev.vars.example .dev.vars      # edite a senha e o segredo
 npm run db:local                    # cria o banco local e carrega os dados iniciais
 npm run dev                         # http://localhost:8788  (painel em /admin/)
+npm test                            # testes do limpador de texto e do motor de preços/cupons (zera o banco local)
 ```
 
 ## Publicar no Cloudflare (quando o domínio estiver pronto)
@@ -30,7 +39,7 @@ npm run dev                         # http://localhost:8788  (painel em /admin/)
 3. No Cloudflare: Workers e Pages > Criar > Pages > conectar este repositório (branch `main`).
    Comando de build: vazio. Pasta de saída: `public`.
 4. Em Configurações > Variáveis e segredos (como **segredos**): `ADMIN_PASSWORD` (mínimo 8 caracteres, use uma senha forte)
-   e `SESSION_SECRET` (texto aleatório com 32+ caracteres).
+   `SESSION_SECRET` e `HASH_SECRET` (textos aleatórios diferentes, com 32+ caracteres cada).
 5. Domínio: Pages > Domínios personalizados > `meltyvelas.com.br`.
 
 ## Segurança do painel

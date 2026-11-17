@@ -179,3 +179,8 @@ footer .copy{border-top:1px solid rgba(255,255,255,.15);margin-top:26px;padding-
 .desc h3{font-family:var(--serif);font-weight:600;font-size:1.35rem;color:var(--brand-dark);margin:16px 0 4px}
 .desc ul,.desc ol{margin:0 0 10px;padding-left:22px}
 .desc a{color:var(--brand);text-decoration:underline}
+
+/* promoção */
+.price .de{font-weight:400;color:var(--muted);text-decoration:line-through;font-size:.85em;margin-right:6px}
+.price .off{display:inline-block;font-size:.72em;background:var(--soft);color:var(--brand-dark);padding:1px 7px;border-radius:999px;vertical-align:middle}
+.tag.promo{left:auto;right:12px;background:var(--brand)}

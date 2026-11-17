@@ -42,3 +42,12 @@ export function listaDeTextos(v, nome, maxItens, maxChars) {
   if (!Array.isArray(v) || v.length > maxItens) throw new Error(`${nome}: lista inválida (máximo ${maxItens} itens).`);
   return v.map((t) => texto(t, nome, { max: maxChars })).filter(Boolean);
 }
+
+// Data AAAA-MM-DD (opcional). Devolve null se vazia.
+export function data(v, nome) {
+  v = texto(v, nome, { max: 10 });
+  if (!v) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(v + "T00:00:00Z")) || new Date(v + "T00:00:00Z").toISOString().slice(0, 10) !== v)
+    throw new Error(`${nome}: data inválida.`);
+  return v;
+}

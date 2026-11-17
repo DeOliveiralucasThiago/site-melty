@@ -149,10 +149,16 @@
     var tag = "", esgotado = p.estoque <= 0;
     if (esgotado) tag = '<span class="tag">Esgotado</span>';
     else if (p.estoque === 1) tag = '<span class="tag low">Última unidade</span>';
+    if (p.promocao && !esgotado) tag += '<span class="tag promo">Promoção</span>';
     return '<a class="card" href="produto.html?id=' + encodeURIComponent(p.id) + '">' +
       '<div class="img"><img src="' + esc(foto(p)) + '" alt="' + esc(p.nome) + '" loading="lazy">' + tag + "</div>" +
-      '<div class="info"><h3>' + esc(p.nome) + '</h3><span class="price">' + brl.format(p.preco) + "</span>" +
+      '<div class="info"><h3>' + esc(p.nome) + '</h3>' + htmlPreco(p) +
       '<span class="pill' + (esgotado ? " off" : "") + '">' + (esgotado ? "Esgotado" : "Ver vela") + "</span></div></a>";
+  }
+  function htmlPreco(p) {
+    if (!p.promocao) return '<span class="price">' + brl.format(p.preco) + "</span>";
+    var pct = Math.round((1 - p.preco / p.preco_cheio) * 100);
+    return '<span class="price"><s class="de">' + brl.format(p.preco_cheio) + "</s>" + brl.format(p.preco) + ' <span class="off">-' + pct + "%</span></span>";
   }
   function disponiveisPrimeiro(lista) {
     return lista.filter(function (p) { return p.estoque > 0; }).concat(lista.filter(function (p) { return p.estoque <= 0; }));
@@ -227,7 +233,7 @@
       '<div><img id="fotoPrincipal" src="' + esc(foto(p)) + '" alt="' + esc(p.nome) + '">' + miniaturas(p) + "</div>" +
       '<div><p class="crumbs"><a href="index.html">Início</a> / ' +
       (k ? '<a href="catalogo.html?cat=' + encodeURIComponent(k.id) + '">' + esc(k.nome) + "</a> / " : "") + esc(p.nome) + "</p>" +
-      "<h1>" + esc(p.nome) + '</h1><div class="price">' + brl.format(p.preco) + "</div>" +
+      "<h1>" + esc(p.nome) + "</h1><div class=\"price grande\">" + htmlPreco(p).replace(/^<span class="price">|<\/span>$/g, "") + "</div>" +
       '<p class="small muted">' + estoqueTxt + "</p>" +
       '<div class="desc">' + p.descricao + "</div>" +
       '<div class="qty"><button id="menos" aria-label="Diminuir">−</button><span id="q">1</span><button id="mais" aria-label="Aumentar">+</button></div>' +

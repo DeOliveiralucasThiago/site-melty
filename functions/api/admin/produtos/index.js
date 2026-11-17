@@ -2,8 +2,9 @@ import { json, erro, lerJson, idUnico } from "../../../_lib/util.js";
 import * as v from "../../../_lib/validar.js";
 import { todasExistem } from "../../../_lib/imagens.js";
 import { sanitizarDescricao } from "../../../_lib/html.js";
+import { promocaoVigente } from "../../../_lib/precos.js";
 
-export async function lerProduto(db, c, { parcial = false } = {}) {
+export async function lerProduto(db, c, { parcial = false, existente = null } = {}) {
   const o = {};
   if (!parcial || "nome" in c) o.nome = v.texto(c.nome, "Nome", { max: 80, obrigatorio: true });
   if (!parcial || "descricao" in c) {
@@ -15,6 +16,18 @@ export async function lerProduto(db, c, { parcial = false } = {}) {
   if (!parcial || "estoque" in c) o.estoque = v.inteiro(c.estoque, "Estoque", 0, 9999);
   if (!parcial || "peso_kg" in c) o.peso_kg = v.decimal(c.peso_kg ?? 0.42, "Peso (kg)", 0.01, 30);
   if (!parcial || "ordem" in c) o.ordem = v.inteiro(c.ordem ?? 0, "Posição", 0, 9999);
+  if (!parcial || "preco_promo" in c || "promo_inicio" in c || "promo_fim" in c) {
+    const vazio = c.preco_promo === undefined || c.preco_promo === null || c.preco_promo === "";
+    if (vazio) { o.preco_promo_centavos = null; o.promo_inicio = null; o.promo_fim = null; }
+    else {
+      o.preco_promo_centavos = v.centavos(c.preco_promo, "Preço promocional");
+      o.promo_inicio = v.data(c.promo_inicio, "Início da promoção");
+      o.promo_fim = v.data(c.promo_fim, "Fim da promoção");
+      if (o.promo_inicio && o.promo_fim && o.promo_fim < o.promo_inicio) throw new Error("Promoção: o fim não pode ser antes do início.");
+      const cheio = o.preco_centavos ?? existente?.preco_centavos;
+      if (cheio !== undefined && o.preco_promo_centavos >= cheio) throw new Error("Preço promocional: precisa ser menor que o preço normal.");
+    }
+  }
   for (const k of ["novidade", "destaque", "ativo"]) if (!parcial || k in c) o[k] = v.bool(c[k]);
   if (!parcial || "categoria" in c) {
     if (c.categoria) {
@@ -32,7 +45,8 @@ export async function lerProduto(db, c, { parcial = false } = {}) {
 
 export function paraPainel(p) {
   return { id: p.id, nome: p.nome, descricao: sanitizarDescricao(p.descricao), preco: p.preco_centavos / 100, estoque: p.estoque, categoria: p.categoria_id,
-    peso_kg: p.peso_kg, imagens: JSON.parse(p.imagens), novidade: !!p.novidade, destaque: !!p.destaque, ativo: !!p.ativo, ordem: p.ordem };
+    peso_kg: p.peso_kg, preco_promo: p.preco_promo_centavos ? p.preco_promo_centavos / 100 : null, promo_inicio: p.promo_inicio, promo_fim: p.promo_fim,
+    promocao_vigente: promocaoVigente(p), imagens: JSON.parse(p.imagens), novidade: !!p.novidade, destaque: !!p.destaque, ativo: !!p.ativo, ordem: p.ordem };
 }
 
 export async function onRequestGet({ env }) {

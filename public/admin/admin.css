@@ -84,3 +84,10 @@ dialog h2{margin-top:0}
 .editor h3{font-size:1.2rem;color:var(--brand-dark);margin:14px 0 4px}
 .editor ul,.editor ol{margin:0 0 10px;padding-left:22px}
 .editor a{color:var(--brand);text-decoration:underline}
+
+details{margin:8px 0;border:1px dashed var(--line);border-radius:10px;padding:6px 12px;background:#fff}
+summary{cursor:pointer;font-weight:600;color:var(--brand-dark);padding:4px 0}
+.miniatura.sigla{display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--brand-dark);font-size:1.3rem}
+.lista-escopo{max-height:180px;overflow:auto;border:1.5px solid var(--line);border-radius:10px;padding:4px 10px;margin:6px 0;background:#fff}
+.lista-escopo:empty{display:none}
+input[type=date]{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff}
