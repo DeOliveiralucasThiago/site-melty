@@ -21,12 +21,25 @@ pedidos simultâneos); limite total de usos; reserva por 30 min enquanto o pagam
 guardado só como código embaralhado (HMAC com `HASH_SECRET`), nunca aberto.
 Na Fase 3, o pedido deve chamar `calcularPedido` → `reservarCupom` ao criar e `confirmarUso`/`liberarUso` ao pagar/cancelar.
 
+## Pedidos e pagamento (Fase 3)
+Fluxo: carrinho → `checkout.html` (dados, endereço, cupom) → `POST /api/pedidos` → cliente vai pagar no provedor → o provedor avisa → `aplicarPagamento()`.
+- O servidor recalcula tudo (preço, promoção, cupom, frete) e **reserva o estoque e o cupom por 30 min**. Se não pagar, o pedido vence e tudo volta
+  (a limpeza roda sozinha quando alguém acessa a loja ou o painel). O estoque nunca fica negativo (o banco recusa) mesmo com compras simultâneas.
+- Cliente acompanha em `pedido.html?t=<código secreto de 32 caracteres>` (sem CPF, e-mail, telefone ou endereço completo na tela).
+- Painel > Pedidos: lista, dados de entrega, etapas (produção → enviado com rastreio → entregue), cancelar/reembolsado e alertas de conferência
+  (CPF de quem pagou diferente, valor menor, pagamento depois de vencer).
+- **Provedor de pagamento** (`functions/_lib/pagamento.js`): `PAGAMENTO_PROVEDOR=teste` ativa um pagamento simulado (só desenvolvimento, nunca em produção).
+  **Mercado Pago ainda não está ligado**: falta validar na documentação oficial, com credenciais de teste, a assinatura do aviso (webhook),
+  o formato do pagamento (inclui CPF do pagador?) e qual API usar (Preferences x Orders). Sem provedor, a loja mantém o botão de WhatsApp.
+- Frete: valor fixo provisório (Painel > Textos e contato) até o cálculo por CEP da Fase 4.
+
 ## Rodar no computador (teste)
 ```bash
 npm install
 cp .dev.vars.example .dev.vars      # edite a senha e o segredo
 npm run db:local                    # cria o banco local e carrega os dados iniciais
 npm run dev                         # http://localhost:8788  (painel em /admin/)
+npx wrangler pages dev --port 8788 --binding PAGAMENTO_PROVEDOR=teste   # com pagamento simulado
 npm test                            # testes do limpador de texto e do motor de preços/cupons (zera o banco local)
 ```
 
@@ -52,4 +65,4 @@ npm test                            # testes do limpador de texto e do motor de 
 - Painel com política de conteúdo restrita (`public/_headers`).
 
 ## Próximas fases
-Pagamento (Fase 3), frete pelo Melhor Envio (Fase 4), e-mails automáticos (Fase 5).
+Ligar o Mercado Pago (Fase 3, pendente de credenciais e conferência da documentação), frete pelo Melhor Envio (Fase 4), e-mails automáticos (Fase 5).

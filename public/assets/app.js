@@ -81,7 +81,7 @@
     document.getElementById("rodape").innerHTML =
       '<div class="wrap"><div class="cols">' +
       "<div><h4>" + esc(c.loja) + "</h4><p>" + esc(c.slogan) + ".</p></div>" +
-      '<div><h4>Institucional</h4><a href="index.html#quem-somos">Quem somos</a><a href="prazos.html">Prazos e Envio</a></div>' +
+      '<div><h4>Institucional</h4><a href="index.html#quem-somos">Quem somos</a><a href="prazos.html">Prazos e Envio</a><a href="politica-de-privacidade.html">Política de Privacidade</a></div>' +
       '<div><h4>Atendimento</h4><a href="https://wa.me/' + esc(c.whatsapp) + '" rel="noopener">WhatsApp</a>' +
       '<a href="https://instagram.com/' + esc(c.instagram) + '" rel="noopener">Instagram @' + esc(c.instagram) + "</a>" +
       '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + "</a></div></div>" +
@@ -296,8 +296,10 @@
         '<div class="line muted"><span>Frete</span><span>calculado no fechamento (em breve)</span></div>' +
         '<div class="line total"><span>Total</span><span>' + brl.format(subtotal) + "</span></div></div>" +
         avisoPrazo(d.config) +
-        '<p><a class="btn" href="https://wa.me/' + esc(d.config.whatsapp) + "?text=" + msg + '" rel="noopener">Finalizar pelo WhatsApp (provisório)</a></p>' +
-        '<p class="small muted">O pagamento online e o cálculo de frete por CEP serão ativados nas próximas fases. Por enquanto o pedido é combinado pelo WhatsApp.</p></div>';
+        (d.config.pagamento_ativo
+          ? '<p><a class="btn" href="checkout.html">Finalizar compra</a></p><p class="small muted">Você informa os dados de entrega e escolhe como pagar no próximo passo. O frete e os descontos são confirmados lá.</p>'
+          : '<p><a class="btn" href="https://wa.me/' + esc(d.config.whatsapp) + "?text=" + msg + '" rel="noopener">Finalizar pelo WhatsApp (provisório)</a></p>' +
+            '<p class="small muted">O pagamento online ainda não está ativo. Por enquanto o pedido é combinado pelo WhatsApp.</p>') + "</div>";
 
       app.querySelectorAll("button[data-a]").forEach(function (b) {
         b.onclick = function () {
@@ -314,6 +316,202 @@
     desenhar();
   }
 
+
+  /* ---------- fechamento da compra ---------- */
+  function cpfValido(t) {
+    var d = String(t).replace(/\D/g, "");
+    if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+    function dv(base) { var s = 0; for (var i = 0; i < base.length; i++) s += Number(base[i]) * (base.length + 1 - i); var r = (s * 10) % 11; return r === 10 ? 0 : r; }
+    return dv(d.slice(0, 9)) === Number(d[9]) && dv(d.slice(0, 10)) === Number(d[10]);
+  }
+  function mascara(el, fn) { el.addEventListener("input", function () { el.value = fn(el.value.replace(/\D/g, "")); }); }
+  var mCpf = function (d) { d = d.slice(0, 11); return d.replace(/^(\d{3})(\d)/, "$1.$2").replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1-$2"); };
+  var mCep = function (d) { d = d.slice(0, 8); return d.replace(/^(\d{5})(\d)/, "$1-$2"); };
+  var mTel = function (d) { d = d.slice(0, 11); return d.length > 10 ? d.replace(/^(\d{2})(\d{5})(\d)/, "($1) $2-$3") : d.replace(/^(\d{2})(\d{4})(\d)/, "($1) $2-$3"); };
+  var UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","SC","TO"].filter(function (u, i, a) { return a.indexOf(u) === i; });
+
+  function enviarJson(url, corpo) {
+    return fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corpo) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (dados) { return { ok: r.ok, status: r.status, dados: dados }; }); });
+  }
+  function itensDoCarrinho() {
+    var c = lerCarrinho();
+    return Object.keys(c).map(function (id) { return { id: id, qtd: c[id] }; });
+  }
+
+  function paginaCheckout(d) {
+    var app = document.getElementById("app");
+    var itens = itensDoCarrinho();
+    if (!itens.length) {
+      app.innerHTML = '<div class="wrap page"><h1>Finalizar compra</h1><p>O carrinho está vazio.</p><a class="btn" href="index.html">Ver velas</a></div>';
+      return;
+    }
+    if (!d.config.pagamento_ativo) {
+      app.innerHTML = '<div class="wrap page"><h1>Finalizar compra</h1><p>O pagamento online ainda não está disponível. <a href="carrinho.html">Voltar ao carrinho</a> e finalizar pelo WhatsApp.</p></div>';
+      return;
+    }
+    var estado = { cupom: "", resumo: null };
+
+    function campo(id, rotulo, extra) {
+      return '<div class="campo"><label for="' + id + '">' + rotulo + '</label><input id="' + id + '" name="' + id + '" ' + (extra || "") + " required></div>";
+    }
+    app.innerHTML = '<div class="wrap page largo"><h1>Finalizar compra</h1><div class="checkout"><form id="form" novalidate>' +
+      "<h2>Seus dados</h2>" +
+      campo("nome", "Nome completo", 'autocomplete="name" maxlength="80"') +
+      '<div class="dois">' + campo("email", "E-mail", 'type="email" autocomplete="email" maxlength="120"') + campo("email2", "Confirme o e-mail", 'type="email" autocomplete="off" maxlength="120"') + "</div>" +
+      '<div class="dois">' + campo("telefone", "Telefone com DDD", 'type="tel" autocomplete="tel" inputmode="numeric" placeholder="(27) 99999-0000"') + campo("cpf", "CPF", 'inputmode="numeric" autocomplete="off" placeholder="000.000.000-00"') + "</div>" +
+      '<p class="small muted">Usamos o CPF para emitir o pagamento e controlar cupons. Veja a <a href="politica-de-privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>.</p>' +
+      "<h2>Endereço de entrega</h2>" +
+      '<div class="dois">' + campo("cep", "CEP", 'inputmode="numeric" autocomplete="postal-code" placeholder="00000-000"') + campo("rua", "Rua", 'autocomplete="address-line1" maxlength="100"') + "</div>" +
+      '<div class="tres">' + campo("numero", "Número", 'maxlength="10"') + '<div class="campo"><label for="complemento">Complemento</label><input id="complemento" maxlength="40" autocomplete="address-line2"></div>' + campo("bairro", "Bairro", 'maxlength="60"') + "</div>" +
+      '<div class="dois">' + campo("cidade", "Cidade", 'maxlength="60" autocomplete="address-level2"') +
+      '<div class="campo"><label for="uf">Estado</label><select id="uf" required><option value="">Selecione</option>' + UFS.map(function (u) { return "<option>" + u + "</option>"; }).join("") + "</select></div></div>" +
+      "<h2>Cupom de desconto</h2>" +
+      '<div class="cupom"><input id="cupom" maxlength="20" placeholder="Código do cupom" autocomplete="off"><button type="button" class="btn ghost" id="aplicar">Aplicar</button></div><p id="msgCupom" class="small" role="status"></p>' +
+      '<label class="aceite"><input type="checkbox" id="aceite"> Li e concordo com a <a href="politica-de-privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>.</label>' +
+      '<p id="erro" class="erro" role="alert"></p>' +
+      '<button class="btn" id="enviar" type="submit">Ir para o pagamento</button></form>' +
+      '<aside class="resumo" id="resumo"><p class="muted">Calculando…</p></aside></div></div>';
+
+    var $ = function (id) { return document.getElementById(id); };
+    mascara($("cpf"), mCpf); mascara($("cep"), mCep); mascara($("telefone"), mTel);
+
+    function desenharResumo() {
+      var r = estado.resumo; if (!r) return;
+      $("resumo").innerHTML = "<h2>Resumo</h2>" + r.itens.map(function (i) {
+        return '<div class="linha-res"><span>' + i.qtd + "× " + esc(i.nome) + (i.promocao ? ' <em class="promo-txt">promoção</em>' : "") + "</span><span>" + brl.format(i.subtotal) + "</span></div>";
+      }).join("") +
+        '<div class="linha-res"><span>Subtotal</span><span>' + brl.format(r.subtotal) + "</span></div>" +
+        (r.desconto > 0 ? '<div class="linha-res desc"><span>Desconto (' + esc(r.cupom.codigo) + ")</span><span>− " + brl.format(r.desconto) + "</span></div>" : "") +
+        '<div class="linha-res"><span>Frete</span><span>' + (r.frete > 0 ? brl.format(r.frete) : (r.frete_gratis ? "Grátis (cupom)" : "A combinar")) + "</span></div>" +
+        '<div class="linha-res total"><span>Total</span><span>' + brl.format(r.total) + "</span></div>" +
+        '<p class="small muted">Valores conferidos pelo servidor no momento da compra.</p>' + avisoPrazo(d.config);
+    }
+    function simular(comCupom) {
+      var corpo = { itens: itens };
+      if (comCupom) { corpo.cupom = estado.cupom; corpo.cpf = $("cpf").value; }
+      return enviarJson("/api/cupom/simular", corpo);
+    }
+    simular(false).then(function (r) {
+      if (!r.ok) { $("resumo").innerHTML = '<p class="erro">' + esc(r.dados.erro || "Não foi possível calcular.") + '</p><p><a href="carrinho.html">Voltar ao carrinho</a></p>'; $("enviar").disabled = true; return; }
+      estado.resumo = r.dados; desenharResumo();
+    });
+
+    $("aplicar").onclick = function () {
+      var cod = $("cupom").value.trim().toUpperCase(), msg = $("msgCupom");
+      if (!cod) { estado.cupom = ""; simular(false).then(function (r) { if (r.ok) { estado.resumo = r.dados; desenharResumo(); } }); msg.textContent = ""; return; }
+      if (!cpfValido($("cpf").value)) { msg.className = "small erro"; msg.textContent = "Preencha primeiro um CPF válido: o cupom é vinculado ao CPF."; $("cpf").focus(); return; }
+      estado.cupom = cod;
+      simular(true).then(function (r) {
+        if (!r.ok) { estado.cupom = ""; msg.className = "small erro"; msg.textContent = r.dados.erro || "Cupom inválido."; return; }
+        estado.resumo = r.dados; msg.className = "small ok"; msg.textContent = r.dados.frete_gratis ? "Cupom aplicado: frete grátis." : "Cupom aplicado!"; desenharResumo();
+      });
+    };
+
+    $("form").onsubmit = function (ev) {
+      ev.preventDefault();
+      var erro = $("erro"); erro.textContent = "";
+      function v(id) { return $(id).value.trim(); }
+      var falta = ["nome", "email", "email2", "telefone", "cpf", "cep", "rua", "numero", "bairro", "cidade", "uf"].filter(function (id) { return !v(id); });
+      if (falta.length) { erro.textContent = "Preencha todos os campos obrigatórios."; $(falta[0]).focus(); return; }
+      if (v("email").toLowerCase() !== v("email2").toLowerCase()) { erro.textContent = "Os dois e-mails não são iguais. Confira para receber os avisos do pedido."; $("email2").focus(); return; }
+      if (!cpfValido(v("cpf"))) { erro.textContent = "CPF inválido."; $("cpf").focus(); return; }
+      if (!$("aceite").checked) { erro.textContent = "É preciso aceitar a Política de Privacidade para continuar."; return; }
+      var botao = $("enviar"); botao.disabled = true; botao.textContent = "Criando o pedido…";
+      enviarJson("/api/pedidos", {
+        itens: itens,
+        cliente: { nome: v("nome"), email: v("email"), telefone: v("telefone"), cpf: v("cpf"), cep: v("cep"), rua: v("rua"), numero: v("numero"), complemento: v("complemento"),
+                   bairro: v("bairro"), cidade: v("cidade"), uf: v("uf"), cupom: estado.cupom, aceite: true }
+      }).then(function (r) {
+        if (!r.ok) {
+          erro.textContent = (r.dados && r.dados.erro) || "Não foi possível criar o pedido.";
+          if (r.dados && r.dados.codigo === "estoque") erro.innerHTML = esc(erro.textContent) + ' <a href="carrinho.html">Ver carrinho</a>';
+          botao.disabled = false; botao.textContent = "Ir para o pagamento"; return;
+        }
+        try { localStorage.setItem("melty_pedido", r.dados.token); } catch (e) { /* ignora */ }
+        salvarCarrinho({}); atualizarBadge();
+        location.href = r.dados.url;
+      }).catch(function () { erro.textContent = "Sem conexão. Tente de novo."; botao.disabled = false; botao.textContent = "Ir para o pagamento"; });
+    };
+  }
+
+  /* ---------- acompanhamento do pedido ---------- */
+  function quando(sql) {
+    if (!sql) return "";
+    return new Date(sql.replace(" ", "T") + "Z").toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+  var ETAPAS = [["aguardando_pagamento", "Pedido recebido"], ["pago", "Pagamento confirmado"], ["em_producao", "Em produção"], ["enviado", "Enviado"], ["entregue", "Entregue"]];
+
+  function paginaPedido(d) {
+    var token = new URLSearchParams(location.search).get("t") || "";
+    var app = document.getElementById("app");
+    var timer = null;
+    function desenhar(p) {
+      var idx = ETAPAS.map(function (e) { return e[0]; }).indexOf(p.status);
+      var etapas = idx < 0 ? "" : '<ol class="etapas">' + ETAPAS.map(function (e, i) {
+        var h = p.historico.filter(function (x) { return x.tipo === (e[0] === "aguardando_pagamento" ? "criado" : e[0]); })[0];
+        return '<li class="' + (i < idx ? "feito" : i === idx ? "atual" : "") + '"><b>' + e[1] + "</b>" + (h ? "<span>" + esc(quando(h.quando)) + "</span>" : "") + "</li>";
+      }).join("") + "</ol>";
+      var aviso = "";
+      if (p.status === "cancelado") aviso = '<div class="notice">Este pedido foi cancelado. Se já pagou, fale com a gente pelo WhatsApp.</div>';
+      if (p.status === "reembolsado") aviso = '<div class="notice">O pagamento deste pedido foi reembolsado.</div>';
+      if (p.status === "aguardando_pagamento") aviso = '<div class="notice"><strong>Falta pagar.</strong> Reservamos seus itens até ' + esc(quando(p.expira_em)) + '. <p><a class="btn" href="' + esc(p.pagamento_url) + '">Pagar agora</a></p></div>';
+      var rastreio = p.rastreio ? '<div class="notice"><strong>Código de rastreio:</strong> ' + esc(p.rastreio) + ' · <a href="' + esc(p.rastreio_url) + '" target="_blank" rel="noopener">acompanhar a entrega</a></div>' : "";
+      app.innerHTML = '<div class="wrap page"><h1>Pedido #' + p.numero + "</h1><p class='muted'>Olá, " + esc(p.primeiro_nome) + "! Entrega em " + esc(p.cidade) + "/" + esc(p.uf) + ".</p>" +
+        aviso + rastreio + etapas +
+        "<h2>Itens</h2>" + p.itens.map(function (i) { return '<div class="linha-res"><span>' + i.qtd + "× " + esc(i.nome) + "</span><span>" + brl.format(i.subtotal) + "</span></div>"; }).join("") +
+        '<div class="linha-res"><span>Subtotal</span><span>' + brl.format(p.subtotal) + "</span></div>" +
+        (p.desconto > 0 ? '<div class="linha-res desc"><span>Desconto' + (p.cupom ? " (" + esc(p.cupom) + ")" : "") + "</span><span>− " + brl.format(p.desconto) + "</span></div>" : "") +
+        '<div class="linha-res"><span>Frete</span><span>' + (p.frete > 0 ? brl.format(p.frete) : "Grátis") + "</span></div>" +
+        '<div class="linha-res total"><span>Total</span><span>' + brl.format(p.total) + "</span></div>" +
+        '<p class="small muted">Guarde este endereço (link) para acompanhar o pedido. Dúvidas? <a href="https://wa.me/' + esc(d.config.whatsapp) + '" rel="noopener">Fale com a gente</a>.</p></div>';
+    }
+    function buscar() {
+      return fetch("/api/pedidos/" + encodeURIComponent(token), { cache: "no-store" }).then(function (r) {
+        if (!r.ok) throw new Error("nao_encontrado");
+        return r.json();
+      }).then(function (p) { desenhar(p); if (p.status !== "aguardando_pagamento" && timer) { clearInterval(timer); timer = null; } return p; });
+    }
+    if (!/^[a-f0-9]{32}$/.test(token)) { app.innerHTML = '<div class="wrap page"><h1>Pedido não encontrado</h1><p>Confira o link que enviamos para você.</p></div>'; return; }
+    buscar().then(function (p) {
+      if (p.status === "aguardando_pagamento") timer = setInterval(function () { buscar().catch(function () {}); }, 10000);
+    }).catch(function () { app.innerHTML = '<div class="wrap page"><h1>Pedido não encontrado</h1><p>Confira o link que enviamos para você.</p></div>'; });
+  }
+
+  /* ---------- pagamento de teste (só desenvolvimento) ---------- */
+  function paginaTeste(d) {
+    var token = new URLSearchParams(location.search).get("t") || "";
+    var app = document.getElementById("app");
+    app.innerHTML = '<div class="wrap page"><h1>Pagamento de teste</h1><div class="notice"><strong>Ambiente de teste.</strong> Esta tela só existe em desenvolvimento e simula o aviso do provedor de pagamento. Nenhum dinheiro é cobrado.</div>' +
+      '<p><button class="btn" data-a="aprovar">Simular pagamento aprovado</button></p>' +
+      '<p><button class="btn ghost" data-a="recusar">Simular pagamento recusado</button></p>' +
+      '<p><button class="btn ghost" data-a="aprovar_outro_cpf">Aprovado, mas pago com outro CPF</button></p>' +
+      '<p><button class="btn ghost" data-a="aprovar_valor_menor">Aprovado com valor menor</button></p>' +
+      '<p><a href="pedido.html?t=' + esc(token) + '">Ver o pedido</a></p><p id="msg" class="small"></p></div>';
+    app.querySelectorAll("button[data-a]").forEach(function (b) {
+      b.onclick = function () {
+        enviarJson("/api/pagamento-teste/" + encodeURIComponent(token), { acao: b.getAttribute("data-a") }).then(function (r) {
+          if (!r.ok) { document.getElementById("msg").textContent = r.dados.erro || "Erro."; return; }
+          location.href = "pedido.html?t=" + encodeURIComponent(token);
+        });
+      };
+    });
+  }
+
+  /* ---------- política de privacidade ---------- */
+  function paginaPrivacidade(d) {
+    var c = d.config;
+    document.getElementById("app").innerHTML = '<div class="wrap page"><h1>Política de Privacidade</h1>' +
+      '<p class="muted small">Última atualização: ' + new Date().getFullYear() + ". Texto-base, sujeito a revisão.</p>" +
+      "<h2>Quais dados coletamos</h2><p>Para vender e entregar suas velas, pedimos: nome, e-mail, telefone, CPF e endereço de entrega. O pagamento é processado por um provedor de pagamento (você é levado à página dele); nós não vemos nem guardamos dados do seu cartão.</p>" +
+      "<h2>Para que usamos</h2><p>Processar e entregar o pedido, avisar você sobre o andamento, emitir o pagamento, controlar o uso de cupons de desconto e cumprir obrigações legais e fiscais.</p>" +
+      "<h2>CPF e cupons</h2><p>Os cupons são vinculados ao CPF para evitar uso repetido. Para isso, guardamos uma versão embaralhada do CPF (que não permite descobrir o número original) e, no pedido, o CPF completo, que só a loja acessa.</p>" +
+      "<h2>Com quem compartilhamos</h2><p>Apenas com quem é necessário para a compra: o provedor de pagamento e a transportadora (nome, endereço e telefone para a entrega). Não vendemos seus dados.</p>" +
+      "<h2>Por quanto tempo guardamos</h2><p>Pelo tempo necessário para a entrega, garantia e obrigações legais. Depois disso, os dados são apagados ou anonimizados.</p>" +
+      "<h2>Seus direitos</h2><p>Você pode pedir a confirmação do tratamento, acesso, correção, anonimização ou exclusão dos seus dados, entre outros direitos da LGPD (Lei 13.709/2018). Escreva para <a href=\"mailto:" + esc(c.email) + "\">" + esc(c.email) + "</a>.</p>" +
+      "<h2>Cookies e armazenamento local</h2><p>Guardamos no seu navegador apenas o conteúdo do carrinho e o último pedido, para a loja funcionar. Não usamos cookies de publicidade.</p></div>";
+  }
+
   /* ---------- prazos ---------- */
   function paginaPrazos(d) {
     document.getElementById("app").innerHTML =
@@ -328,7 +526,7 @@
   }
 
   /* ---------- início ---------- */
-  var paginas = { home: paginaHome, catalogo: paginaCatalogo, produto: paginaProduto, carrinho: paginaCarrinho, prazos: paginaPrazos };
+  var paginas = { home: paginaHome, catalogo: paginaCatalogo, produto: paginaProduto, carrinho: paginaCarrinho, prazos: paginaPrazos, checkout: paginaCheckout, pedido: paginaPedido, teste: paginaTeste, privacidade: paginaPrivacidade };
   carregar().then(function (d) {
     montarLayout(d);
     var tipo = document.body.getAttribute("data-page");

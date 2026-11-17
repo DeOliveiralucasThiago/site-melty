@@ -3,8 +3,8 @@
   "use strict";
 
   var raiz = document.getElementById("raiz");
-  var S = { produtos: [], categorias: [], banners: [], cupons: [], config: {} };
-  var abaAtual = "produtos";
+  var S = { produtos: [], categorias: [], banners: [], cupons: [], pedidos: [], config: {} };
+  var abaAtual = "pedidos";
 
   /* ---------- utilidades de interface ---------- */
   function h(tag, attrs) {
@@ -192,11 +192,11 @@
   }
 
   /* ---------- estrutura geral ---------- */
-  var ABAS = [["produtos", "Produtos"], ["categorias", "Categorias"], ["banners", "Banners"], ["cupons", "Cupons"], ["textos", "Textos e contato"]];
+  var ABAS = [["pedidos", "Pedidos"], ["produtos", "Produtos"], ["categorias", "Categorias"], ["banners", "Banners"], ["cupons", "Cupons"], ["textos", "Textos e contato"]];
 
   function carregarTudo() {
-    return Promise.all([api("GET", "/produtos"), api("GET", "/categorias"), api("GET", "/banners"), api("GET", "/config"), api("GET", "/cupons")]).then(function (v) {
-      S.produtos = v[0]; S.categorias = v[1]; S.banners = v[2]; S.config = v[3]; S.cupons = v[4];
+    return Promise.all([api("GET", "/produtos"), api("GET", "/categorias"), api("GET", "/banners"), api("GET", "/config"), api("GET", "/cupons"), api("GET", "/pedidos")]).then(function (v) {
+      S.produtos = v[0]; S.categorias = v[1]; S.banners = v[2]; S.config = v[3]; S.cupons = v[4]; S.pedidos = v[5];
     });
   }
 
@@ -211,10 +211,11 @@
       h("span", null, h("a", { href: "/", target: "_blank", rel: "noopener" }, "Ver a loja"),
         h("button", { type: "button", onclick: function () { api("POST", "/logout").then(function () { telaLogin(); }); } }, "Sair"))));
     raiz.appendChild(h("div", { class: "abas", role: "tablist" }, ABAS.map(function (a) {
-      return h("button", { role: "tab", "aria-selected": abaAtual === a[0] ? "true" : "false", onclick: function () { abaAtual = a[0]; desenhar(); } }, a[1]);
+      var novos = a[0] === "pedidos" ? S.pedidos.filter(function (p) { return p.status === "pago"; }).length : 0;
+      return h("button", { role: "tab", "aria-selected": abaAtual === a[0] ? "true" : "false", onclick: function () { abaAtual = a[0]; desenhar(); } }, a[1], novos ? h("span", { class: "etq" }, String(novos)) : null);
     })));
     raiz.appendChild(main);
-    ({ produtos: abaProdutos, categorias: abaCategorias, banners: abaBanners, cupons: abaCupons, textos: abaTextos })[abaAtual](main);
+    ({ pedidos: abaPedidos, produtos: abaProdutos, categorias: abaCategorias, banners: abaBanners, cupons: abaCupons, textos: abaTextos })[abaAtual](main);
   }
   function recarregar() { return carregarTudo().then(desenhar); }
 
@@ -454,6 +455,107 @@
   }
 
 
+
+  /* ========== PEDIDOS ========== */
+  var STATUS_PED = { aguardando_pagamento: ["Aguardando pagamento", "cinza"], pago: ["Pago", ""], em_producao: ["Em produção", ""], enviado: ["Enviado", ""], entregue: ["Entregue", ""], cancelado: ["Cancelado", "cinza"], reembolsado: ["Reembolsado", "cinza"] };
+  var PROXIMOS = { aguardando_pagamento: ["cancelado"], pago: ["em_producao", "enviado", "cancelado", "reembolsado"], em_producao: ["enviado", "cancelado", "reembolsado"], enviado: ["entregue", "cancelado", "reembolsado"], entregue: ["reembolsado"], cancelado: [], reembolsado: [] };
+  var ROTULO_ACAO = { em_producao: "Marcar em produção", enviado: "Marcar como enviado", entregue: "Marcar como entregue", cancelado: "Cancelar pedido", reembolsado: "Marcar como reembolsado" };
+  var EVENTO_TXT = { criado: "Pedido criado", pago: "Pagamento confirmado", em_producao: "Em produção", enviado: "Enviado", entregue: "Entregue", cancelado: "Cancelado", reembolsado: "Reembolsado", pagamento_recusado: "Pagamento recusado", revisao_resolvida: "Alerta conferido" };
+  function dataHora(sql) { return sql ? new Date(sql.replace(" ", "T") + "Z").toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""; }
+  function fmtCpf(c) { return c.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4"); }
+  function fmtTel(t) { return t.length === 11 ? t.replace(/^(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3") : t.replace(/^(\d{2})(\d{4})(\d{4})$/, "($1) $2-$3"); }
+  function copiar(texto) {
+    (navigator.clipboard ? navigator.clipboard.writeText(texto) : Promise.reject()).then(function () { aviso("Copiado.", "ok"); }, function () { aviso("Não foi possível copiar. Selecione o texto e copie.", "erro"); });
+  }
+
+  function abaPedidos(main) {
+    var filtro = h("select", { "aria-label": "Filtrar por situação" }, h("option", { value: "" }, "Todos os pedidos"),
+      Object.keys(STATUS_PED).map(function (k) { return h("option", { value: k }, STATUS_PED[k][0]); }));
+    var lista = h("div");
+    function carregar() {
+      limpar(lista); lista.appendChild(h("p", { class: "dica" }, "Carregando…"));
+      api("GET", "/pedidos" + (filtro.value ? "?status=" + filtro.value : "")).then(function (ps) {
+        limpar(lista);
+        if (!ps.length) { lista.appendChild(h("p", { class: "vazio" }, "Nenhum pedido por aqui ainda.")); return; }
+        ps.forEach(function (p) {
+          var st = STATUS_PED[p.status] || [p.status, ""];
+          lista.appendChild(h("div", { class: "cartao clicavel", tabindex: "0", role: "button", onclick: function () { detalhePedido(p.id); }, onkeydown: function (e) { if (e.key === "Enter") detalhePedido(p.id); } },
+            h("div", { class: "linha pedido" }, h("div", { class: "miniatura sigla" }, "#"),
+              h("div", null, h("div", { class: "nome" }, "Pedido " + p.numero + " · " + p.cliente, h("span", { class: "etq " + st[1] }, st[0]),
+                  p.revisao.length ? h("span", { class: "etq vermelha" }, "Conferir") : null),
+                h("div", { class: "meta" }, reais(p.total) + " · " + p.itens + (p.itens === 1 ? " item" : " itens") + (p.cupom ? " · cupom " + p.cupom : "") + " · " + dataHora(p.criado_em))),
+              h("div", { class: "acoes extra" }, h("span", { class: "btn sec mini" }, "Abrir")))));
+        });
+      }).catch(function (e) { limpar(lista); if (e.message !== "sessão") lista.appendChild(h("p", { class: "erro" }, e.message)); });
+    }
+    filtro.addEventListener("change", carregar);
+    main.appendChild(h("h1", null, "Pedidos"));
+    main.appendChild(h("p", { class: "dica" }, "Pedidos “Pago” são os que você precisa produzir e enviar. Pedidos marcados “Conferir” têm um alerta (por exemplo, CPF de quem pagou diferente do informado)."));
+    main.appendChild(h("div", { class: "barra" }, h("div", { class: "espaco" }, filtro), h("button", { class: "btn sec", onclick: carregar }, "Atualizar")));
+    main.appendChild(lista);
+    carregar();
+  }
+
+  function detalhePedido(id, dlgExistente) {
+    var corpo = h("div", null, h("p", { class: "dica" }, "Carregando…"));
+    var dlg = dlgExistente || dialogo(function (d) { return h("form", { method: "dialog" }, corpo); });
+    if (dlgExistente) { var f = dlgExistente.querySelector("form"); limpar(f); f.appendChild(corpo); }
+    var dlgFecha = function () { dlg.close(); };
+    api("GET", "/pedidos/" + id).then(function (p) { desenharDetalhe(p, corpo, dlgFecha, dlg); })
+      .catch(function (e) { limpar(corpo); corpo.appendChild(h("p", { class: "erro" }, e.message)); });
+  }
+
+  function desenharDetalhe(p, corpo, fechar, dlg) {
+    limpar(corpo);
+    var st = STATUS_PED[p.status] || [p.status, ""];
+    var e = p.endereco, c = p.cliente;
+    var textoEnd = c.nome + "\n" + e.rua + ", " + e.numero + (e.complemento ? " - " + e.complemento : "") + "\n" + e.bairro + " - " + e.cidade + "/" + e.uf + "\nCEP " + e.cep.replace(/^(\d{5})(\d{3})$/, "$1-$2") + "\nTel. " + fmtTel(c.telefone);
+    var link = location.origin + "/pedido.html?t=" + p.token;
+    var rastreio = h("input", { type: "text", maxlength: "30", placeholder: "Código de rastreio (ex.: AB123456789BR)", value: p.rastreio || "", "aria-label": "Código de rastreio" });
+    var proximos = PROXIMOS[p.status] || [];
+
+    function mudar(novo) {
+      var msg = novo === "cancelado" ? "Cancelar o pedido " + p.numero + "? Os itens voltam ao estoque (se ainda não foram enviados)." :
+                novo === "reembolsado" ? "Marque só depois de ter feito o reembolso no painel do provedor de pagamento. Continuar?" : null;
+      if (msg && !confirm(msg)) return;
+      acao(api("POST", "/pedidos/" + p.id + "/status", { status: novo, rastreio: rastreio.value }), "Pedido atualizado.")
+        .then(function (n) { desenharDetalhe(n, corpo, fechar, dlg); }).catch(function () {});
+    }
+
+    corpo.appendChild(h("h2", null, "Pedido " + p.numero, h("span", { class: "etq " + st[1] }, st[0])));
+    corpo.appendChild(h("p", { class: "dica" }, "Feito em " + dataHora(p.criado_em) + (p.pago_em ? " · pago em " + dataHora(p.pago_em) : "") + (p.expira_em && p.status === "aguardando_pagamento" ? " · reserva até " + dataHora(p.expira_em) : "")));
+    p.revisao.forEach(function (r) { corpo.appendChild(h("div", { class: "alerta" }, "⚠ " + r.texto)); });
+    if (p.revisao.length) corpo.appendChild(h("div", { class: "barra" }, h("button", { class: "btn sec mini", type: "button", onclick: function () {
+      acao(api("POST", "/pedidos/" + p.id + "/revisao"), "Alerta conferido.").then(function (n) { desenharDetalhe(n, corpo, fechar, dlg); }).catch(function () {}); } }, "Já conferi")));
+
+    corpo.appendChild(h("h2", null, "Cliente"));
+    corpo.appendChild(h("p", null, c.nome, h("br"), c.email, h("br"), fmtTel(c.telefone) + " · ", h("a", { href: "https://wa.me/55" + c.telefone, target: "_blank", rel: "noopener" }, "abrir no WhatsApp"), h("br"), "CPF " + fmtCpf(c.cpf)));
+    corpo.appendChild(h("h2", null, "Entrega"));
+    corpo.appendChild(h("p", { class: "endereco" }, textoEnd));
+    corpo.appendChild(h("div", { class: "barra" }, h("button", { class: "btn sec mini", type: "button", onclick: function () { copiar(textoEnd); } }, "Copiar endereço")));
+
+    corpo.appendChild(h("h2", null, "Itens"));
+    p.itens.forEach(function (i) { corpo.appendChild(h("div", { class: "linha-ped" }, h("span", null, i.qtd + "× " + i.nome + (i.promocao ? " (promoção)" : "")), h("span", null, reais(i.unitario * i.qtd)))); });
+    corpo.appendChild(h("div", { class: "linha-ped" }, h("span", null, "Subtotal"), h("span", null, reais(p.subtotal))));
+    if (p.desconto > 0) corpo.appendChild(h("div", { class: "linha-ped" }, h("span", null, "Desconto" + (p.cupom ? " (" + p.cupom + ")" : "")), h("span", null, "− " + reais(p.desconto))));
+    corpo.appendChild(h("div", { class: "linha-ped" }, h("span", null, "Frete"), h("span", null, reais(p.frete))));
+    corpo.appendChild(h("div", { class: "linha-ped total" }, h("span", null, "Total"), h("span", null, reais(p.total))));
+
+    if (proximos.length) {
+      corpo.appendChild(h("h2", null, "Próximo passo"));
+      if (proximos.indexOf("enviado") >= 0) corpo.appendChild(h("div", null, h("label", null, "Código de rastreio (obrigatório para marcar como enviado)"), rastreio));
+      corpo.appendChild(h("div", { class: "barra" }, proximos.map(function (n) {
+        return h("button", { class: "btn mini" + (n === "cancelado" || n === "reembolsado" ? " perigo" : n === "enviado" || n === "em_producao" || n === "entregue" ? "" : " sec"), type: "button", onclick: function () { mudar(n); } }, ROTULO_ACAO[n]);
+      })));
+    } else if (p.rastreio) corpo.appendChild(h("p", null, "Rastreio: " + p.rastreio));
+
+    corpo.appendChild(h("h2", null, "Link de acompanhamento do cliente"));
+    corpo.appendChild(h("div", { class: "barra" }, h("input", { type: "text", readonly: true, value: link, "aria-label": "Link de acompanhamento" }), h("button", { class: "btn sec mini", type: "button", onclick: function () { copiar(link); } }, "Copiar")));
+    corpo.appendChild(h("h2", null, "Histórico"));
+    p.eventos.forEach(function (ev) { corpo.appendChild(h("div", { class: "meta" }, dataHora(ev.quando) + " · " + (EVENTO_TXT[ev.tipo] || ev.tipo) + (ev.detalhe ? " (" + ev.detalhe + ")" : ""))); });
+    corpo.appendChild(h("div", { class: "barra" }, h("button", { class: "btn sec", type: "button", onclick: function () { fechar(); recarregar(); } }, "Fechar")));
+  }
+
   /* ========== CUPONS ========== */
   var SITUACAO = { ativo: ["Ativo", ""], esgotado: ["Esgotado", "vermelha"], expirado: ["Expirado", "cinza"], desativado: ["Desativado", "cinza"], agendado: ["Agendado", ""] };
   function dataBR(d) { return d ? d.split("-").reverse().join("/") : ""; }
@@ -467,7 +569,7 @@
 
   function abaCupons(main) {
     main.appendChild(h("h1", null, "Cupons de desconto"));
-    main.appendChild(h("p", { class: "dica" }, "Cada cupom vale uma vez por CPF, não se soma a outro cupom no mesmo pedido, e o desconto é calculado pelo servidor. Quando o limite de usos acaba, o cupom fica “Esgotado” sozinho. Os cupons passam a valer para os clientes quando o pagamento online for ativado."));
+    main.appendChild(h("p", { class: "dica" }, "Cada cupom vale uma vez por CPF, não se soma a outro cupom no mesmo pedido, e o desconto é calculado pelo servidor. Quando o limite de usos acaba, o cupom fica “Esgotado” sozinho. Os cupons valem no fechamento da compra, quando o pagamento online estiver ativo."));
     main.appendChild(h("div", { class: "barra" }, h("span", { class: "espaco" }), h("button", { class: "btn", onclick: function () { formCupom(null); } }, "+ Novo cupom")));
     if (!S.cupons.length) main.appendChild(h("p", { class: "vazio" }, "Nenhum cupom ainda."));
     S.cupons.forEach(function (c) {
@@ -588,6 +690,7 @@
       instagram: h("input", { type: "text", maxlength: "30", value: c.instagram || "" }),
       email: h("input", { type: "text", maxlength: "120", value: c.email || "" }),
       dias: h("input", { type: "number", min: "0", max: "60", value: c.prazo_producao_dias_uteis }),
+      frete: h("input", { type: "text", inputmode: "decimal", value: c.frete_provisorio ? Number(c.frete_provisorio).toFixed(2).replace(".", ",") : "0,00" }),
       aviso: h("textarea", { maxlength: "400" }),
       faixa: h("textarea", { maxlength: "520" }),
       qsTitulo: h("input", { type: "text", maxlength: "60", value: qs.titulo || "" }),
@@ -642,7 +745,7 @@
       ev.preventDefault();
       var corpo = {
         loja: f.loja.value, slogan: f.slogan.value, whatsapp: f.whatsapp.value, instagram: f.instagram.value, email: f.email.value,
-        prazo_producao_dias_uteis: Number(f.dias.value), aviso_prazo: f.aviso.value,
+        prazo_producao_dias_uteis: Number(f.dias.value), frete_provisorio: lerReais(f.frete.value || "0"), aviso_prazo: f.aviso.value,
         faixa_avisos: f.faixa.value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean),
         beneficios: ben.filter(function (b) { return b.titulo.value.trim(); }).map(function (b) { return { icone: b.icone.value, titulo: b.titulo.value, texto: b.texto.value }; }),
         quem_somos: { titulo: f.qsTitulo.value, textos: f.qsTextos.value.split(/\n\s*\n/).map(function (x) { return x.trim(); }).filter(Boolean), imagem_id: estado.quem_imagem },
@@ -657,7 +760,7 @@
       secao("Contato"),
       h("div", { class: "grade3" }, campo("WhatsApp", f.whatsapp, "Com 55 e DDD, só números."), campo("Instagram", f.instagram, "Só o usuário, sem @."), campo("E-mail", f.email)),
       secao("Prazo de entrega"),
-      h("div", { class: "grade2" }, campo("Dias úteis de produção", f.dias, "Usado na página Prazos e Envio."), h("div")),
+      h("div", { class: "grade2" }, campo("Dias úteis de produção", f.dias, "Usado na página Prazos e Envio."), campo("Frete provisório (R$)", f.frete, "Valor fixo cobrado em todo pedido até o cálculo por CEP (Fase 4). Cupom de frete grátis zera.")),
       campo("Aviso de prazo", f.aviso, "Aparece na vitrine, no produto e no carrinho."),
       secao("Faixa de avisos do topo", "Uma frase por linha (até 5). Se houver mais de uma, elas se alternam."),
       f.faixa,

@@ -18,6 +18,7 @@ const VALIDADORES = {
   instagram: (x) => { const t = String(x ?? "").trim().replace(/^@/, ""); if (!/^[A-Za-z0-9._]{1,30}$/.test(t)) throw new Error("Instagram: informe só o nome de usuário."); return t; },
   email: (x) => { const t = v.texto(x, "E-mail", { max: 120, obrigatorio: true }); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) throw new Error("E-mail inválido."); return t; },
   prazo_producao_dias_uteis: (x) => v.inteiro(x, "Dias de produção", 0, 60),
+  frete_provisorio: (x) => v.decimal(x ?? 0, "Frete provisório", 0, 500),
   aviso_prazo: (x) => v.texto(x, "Aviso de prazo", { max: 400 }),
   faixa_avisos: (x) => v.listaDeTextos(x, "Faixa de avisos", 5, 100),
   beneficios: (x) => {

@@ -3,9 +3,12 @@ import { json } from "../_lib/util.js";
 import { urlImagem } from "../_lib/imagens.js";
 import { sanitizarDescricao } from "../_lib/html.js";
 import { precoVigente } from "../_lib/precos.js";
+import { provedor } from "../_lib/pagamento.js";
+import { liberarVencidos } from "../_lib/pedidos.js";
 
 export async function onRequestGet({ env }) {
   const db = env.DB;
+  try { await liberarVencidos(db); } catch { /* a vitrine não pode cair por causa disso */ }
   const [cfg, cats, prods, bans] = await Promise.all([
     db.prepare("SELECT chave, valor FROM config").all(),
     db.prepare("SELECT id, nome, descricao FROM categorias WHERE ativa = 1 ORDER BY ordem, nome").all(),
@@ -18,9 +21,11 @@ export async function onRequestGet({ env }) {
   const config = {
     ...c,
     logo: urlImagem(c.logo_id),
+    pagamento_ativo: !!provedor(env),
     quem_somos: { titulo: quem.titulo || "", textos: quem.textos || [], imagem: urlImagem(quem.imagem_id) },
   };
   delete config.logo_id;
+  delete config.frete_provisorio;
 
   const produtos = prods.results.map((p) => {
     const imagens = JSON.parse(p.imagens).map(urlImagem);

@@ -32,3 +32,14 @@ export async function idUnico(db, tabela, texto) {
 }
 
 export const ID_IMAGEM = /^[a-f0-9]{24}$/;
+
+// Limite de requisições: devolve false se a chave já passou do máximo dentro da janela (em ms).
+export async function limitar(db, chave, max, janelaMs) {
+  const agoraMs = Date.now();
+  await db.prepare("DELETE FROM limites WHERE ts < ?").bind(agoraMs - 24 * 3600 * 1000).run();
+  const { n } = await db.prepare("SELECT COUNT(*) AS n FROM limites WHERE chave = ? AND ts >= ?").bind(chave, agoraMs - janelaMs).first();
+  if (n >= max) return false;
+  await db.prepare("INSERT INTO limites (chave, ts) VALUES (?, ?)").bind(chave, agoraMs).run();
+  return true;
+}
+export const ipDe = (request) => request.headers.get("cf-connecting-ip") || "local";

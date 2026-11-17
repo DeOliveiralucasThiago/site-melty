@@ -22,6 +22,7 @@ INSERT INTO config (chave, valor) VALUES ('slogan', '"Velas aromáticas artesana
 INSERT INTO config (chave, valor) VALUES ('whatsapp', '"5527999981626"');
 INSERT INTO config (chave, valor) VALUES ('instagram', '"meltyvelas"');
 INSERT INTO config (chave, valor) VALUES ('email', '"meltyvelas@gmail.com"');
+INSERT INTO config (chave, valor) VALUES ('frete_provisorio', '0');
 INSERT INTO config (chave, valor) VALUES ('prazo_producao_dias_uteis', '3');
 INSERT INTO config (chave, valor) VALUES ('aviso_prazo', '"O prazo é estimado e começa a contar após a postagem do pedido. Pode variar conforme a região e imprevistos dos Correios."');
 INSERT INTO config (chave, valor) VALUES ('faixa_avisos', '["Velas aromáticas artesanais, feitas com carinho","Produção em até 3 dias úteis"]');
