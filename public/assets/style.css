@@ -215,3 +215,7 @@ footer .copy{border-top:1px solid rgba(255,255,255,.15);margin-top:26px;padding-
 .opcao{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;margin-bottom:8px;background:#fff;cursor:pointer}
 .opcao:has(input:checked){border-color:var(--brand);background:var(--tint)}
 .opcao input{margin-top:4px}
+
+.pular{position:absolute;left:-9999px;top:8px;background:#fff;color:var(--brand-dark);padding:8px 14px;border-radius:8px;z-index:100;font-weight:600}
+.pular:focus{left:8px}
+main:focus{outline:none}

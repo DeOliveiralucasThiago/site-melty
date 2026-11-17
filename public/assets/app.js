@@ -48,6 +48,7 @@
   /* ---------- layout comum ---------- */
   function montarLayout(d) {
     var c = d.config;
+    if (!document.querySelector(".pular")) document.body.insertAdjacentHTML("afterbegin", '<a class="pular" href="#app">Pular para o conteúdo</a>');
     var avisos = (c.faixa_avisos || []).map(function (t, i) { return '<span' + (i === 0 ? ' class="on"' : "") + ">" + esc(t) + "</span>"; }).join("");
     var logo = c.logo
       ? '<img src="' + esc(c.logo) + '" alt="' + esc(c.loja) + '">'
@@ -99,7 +100,7 @@
   function htmlBanner(banners) {
     if (!banners || !banners.length) return "";
     var slides = banners.map(function (b, i) {
-      var img = '<img src="' + esc(b.imagem) + '" alt="' + esc(b.alt || "") + '"' + (i ? ' loading="lazy"' : "") + ">";
+      var img = '<img src="' + esc(b.imagem) + '" alt="' + esc(b.alt || "") + '"' + (i ? ' loading="lazy"' : ' fetchpriority="high"') + ' decoding="async">';
       var over = "";
       if (b.titulo) {
         over = '<div class="over"><h2>' + esc(b.titulo) + "</h2>" + (b.botao ? '<span class="pill">' + esc(b.botao) + "</span>" : "") + "</div>";

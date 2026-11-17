@@ -57,17 +57,32 @@ npm test                            # testes do limpador de texto e do motor de 
 ```
 
 ## Publicar no Cloudflare (quando o domínio estiver pronto)
-1. Criar o banco: `npx wrangler d1 create melty` e colocar o `database_id` no `wrangler.toml`.
+1. Criar o banco: `npx wrangler d1 create melty` e colocar o `database_id` no `wrangler.toml` (hoje há um marcador).
 2. Criar as tabelas e os dados iniciais no banco real:
    ```bash
    npx wrangler d1 migrations apply melty --remote
    npx wrangler d1 execute melty --remote --file seed/seed.sql
    ```
-3. No Cloudflare: Workers e Pages > Criar > Pages > conectar este repositório (branch `main`).
-   Comando de build: vazio. Pasta de saída: `public`.
-4. Em Configurações > Variáveis e segredos (como **segredos**): `ADMIN_PASSWORD` (mínimo 8 caracteres, use uma senha forte)
-   `SESSION_SECRET` e `HASH_SECRET` (textos aleatórios diferentes, com 32+ caracteres cada).
-5. Domínio: Pages > Domínios personalizados > `meltyvelas.com.br`.
+3. No Cloudflare: Workers e Pages > Criar > Pages > conectar este repositório (branch `main`). Comando de build: vazio. Pasta de saída: `public`.
+   (A pasta `functions/` é detectada sozinha. O build das funções foi validado com `npx wrangler pages functions build functions`.)
+4. Em Configurações > Variáveis e segredos, como **segredos**: `ADMIN_PASSWORD` (mín. 8 caracteres, forte), `SESSION_SECRET` e `HASH_SECRET`
+   (textos aleatórios diferentes, 32+ caracteres cada) e, quando for o caso, `RESEND_API_KEY`. Como variáveis comuns: `SITE_URL` (ex.: `https://www.meltyvelas.com.br`),
+   `EMAIL_PROVEDOR=resend`, `EMAIL_REMETENTE`. **Nunca** definir `PAGAMENTO_PROVEDOR=teste` nem `EMAIL_PROVEDOR=teste` em produção.
+5. Domínio: Pages > Domínios personalizados > `meltyvelas.com.br`. Depois, no Resend, verificar o domínio de envio (registros SPF/DKIM no DNS).
+
+### Checklist antes de abrir a loja
+- [ ] Painel > Textos e contato: **regiões de entrega e preços**, prazo de produção, caixa padrão (e medidas dos produtos), WhatsApp, e-mail
+- [ ] Painel > Páginas: revisar Privacidade, Prazos e Trocas e Devoluções (idealmente com contador/advogado)
+- [ ] Fotos reais, logo, descrições, "Quem somos"
+- [ ] Mercado Pago ligado e testado com credenciais de teste (compras aprovada, recusada, Pix pendente) antes de usar a conta real
+- [ ] E-mails: domínio verificado e um pedido de teste recebido na caixa de entrada (não no spam)
+- [ ] Conferir as faixas de CEP por estado (`functions/_lib/frete.js`) e o link de rastreio (Melhor Rastreio) com um código real
+- [ ] Fazer um backup (Painel > Pedidos > Cópia de segurança) e combinar uma rotina semanal
+- [ ] Formalização (MEI) e emissão de nota fiscal, conforme orientação do contador
+
+## Compartilhamento e Google
+O servidor monta as tags de pré-visualização (nome, preço e foto) para `/` e `/produto?id=...`, além de `sitemap.xml` e `robots.txt`, porque WhatsApp,
+Instagram e Google não executam o JavaScript do site. Há também dados estruturados (Produto/Organização) para o Google.
 
 ## Segurança do painel
 - Senha única guardada como segredo (nunca no código); sessão em cookie assinado, `HttpOnly`, `SameSite=Strict`, 12 h.
