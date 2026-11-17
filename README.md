@@ -39,7 +39,7 @@ Fluxo: carrinho → `checkout.html` (dados, endereço, cupom) → `POST /api/ped
 ## E-mails automáticos (Fase 5)
 Cada mudança do pedido grava um e-mail numa **fila** (`emails`) e o envio acontece em seguida, com nova tentativa se falhar (a cada 5 min, até 5 vezes;
 e-mail com mais de 1 dia é descartado). Uma falha de e-mail nunca derruba o pedido. Cada tipo sai **uma vez por pedido**.
-Tipos: recebido, pago, enviado (com rastreio), entregue, cancelado, expirado e reembolsado. "Em preparo" não envia e-mail.
+Tipos: recebido, pago ("seu pedido será enviado em até X dias úteis", configurável), enviado (com rastreio), entregue, cancelado, expirado e reembolsado. "Em preparo" não envia e-mail.
 Os e-mails não levam CPF nem endereço completo. No painel (Pedidos > detalhe) dá para ver, pré-visualizar e reenviar.
 - `EMAIL_PROVEDOR=teste`: não envia, só marca "simulado". `EMAIL_PROVEDOR=resend`: usa o Resend (precisa de `RESEND_API_KEY` como **segredo**,
   `EMAIL_REMETENTE`, ex.: `Melty <pedidos@mail.meltyvelas.com.br>`, e um **domínio verificado** no Resend com registros SPF/DKIM). O plano gratuito

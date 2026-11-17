@@ -40,5 +40,6 @@
     ],
     "imagem": "assets/placeholder.svg"
   },
-  "depoimentos": []
+  "depoimentos": [],
+  "prazo_postagem_dias_uteis": 2
 }

@@ -717,7 +717,7 @@
   function abaPaginas(main) {
     var lista = h("div");
     main.appendChild(h("h1", null, "Páginas"));
-    main.appendChild(h("p", { class: "dica" }, "Textos fixos da loja. No texto, você pode usar {{email}}, {{whatsapp}}, {{loja}} e {{aviso_prazo}}: eles são trocados pelos dados atuais da loja, então não precisam ser reescritos se algo mudar. Os textos são um ponto de partida e devem ser revisados por um contador ou advogado antes de a loja abrir."));
+    main.appendChild(h("p", { class: "dica" }, "Textos fixos da loja. No texto, você pode usar {{email}}, {{whatsapp}}, {{loja}}, {{aviso_prazo}} e {{envio}}: eles são trocados pelos dados atuais da loja, então não precisam ser reescritos se algo mudar. Os textos são um ponto de partida e devem ser revisados por um contador ou advogado antes de a loja abrir."));
     main.appendChild(lista);
     lista.appendChild(h("p", { class: "dica" }, "Carregando…"));
     api("GET", "/paginas").then(function (ps) {
@@ -744,7 +744,7 @@
             .then(function () { dlg.close(); return recarregar(); }).catch(function () {});
         } },
           h("h2", null, "Editar página"), h("label", null, "Título"), titulo, h("label", null, "Texto"), ed.el,
-          h("p", { class: "dica" }, "Use “Subtítulo” para separar as seções. Dados da loja: {{email}}, {{whatsapp}}, {{loja}}, {{aviso_prazo}}."),
+          h("p", { class: "dica" }, "Use “Subtítulo” para separar as seções. Dados da loja: {{email}}, {{whatsapp}}, {{loja}}, {{aviso_prazo}}, {{envio}} (“em até 2 dias úteis”)."),
           h("label", { class: "chk" }, publicada, "Página visível na loja"),
           h("div", { class: "barra" }, h("button", { class: "btn", type: "submit" }, "Salvar"), h("button", { class: "btn sec", type: "button", onclick: function () { dlg.close(); } }, "Cancelar")));
       });
@@ -766,6 +766,7 @@
       instagram: h("input", { type: "text", maxlength: "30", value: c.instagram || "" }),
       email: h("input", { type: "text", maxlength: "120", value: c.email || "" }),
       dias: h("input", { type: "number", min: "0", max: "60", value: c.prazo_producao_dias_uteis }),
+      envio: h("input", { type: "number", min: "0", max: "30", value: c.prazo_postagem_dias_uteis === undefined ? 2 : c.prazo_postagem_dias_uteis }),
       gratis: h("input", { type: "text", inputmode: "decimal", value: c.frete_gratis_acima ? Number(c.frete_gratis_acima).toFixed(2).replace(".", ",") : "", placeholder: "Vazio = não tem" }),
       cxAlt: h("input", { type: "text", inputmode: "decimal", value: String((c.embalagem_padrao || {}).altura || 10).replace(".", ",") }),
       cxLarg: h("input", { type: "text", inputmode: "decimal", value: String((c.embalagem_padrao || {}).largura || 12).replace(".", ",") }),
@@ -838,7 +839,7 @@
       ev.preventDefault();
       var corpo = {
         loja: f.loja.value, slogan: f.slogan.value, whatsapp: f.whatsapp.value, instagram: f.instagram.value, email: f.email.value,
-        prazo_producao_dias_uteis: Number(f.dias.value), frete_provisorio: lerReais(f.frete.value || "0"), aviso_prazo: f.aviso.value,
+        prazo_producao_dias_uteis: Number(f.dias.value), prazo_postagem_dias_uteis: Number(f.envio.value || 0), frete_provisorio: lerReais(f.frete.value || "0"), aviso_prazo: f.aviso.value,
         frete_gratis_acima: f.gratis.value.trim() ? lerReais(f.gratis.value) : 0,
         embalagem_padrao: { altura: lerReais(f.cxAlt.value), largura: lerReais(f.cxLarg.value), comprimento: lerReais(f.cxComp.value) },
         frete_regioes: estado.regioes.filter(function (r) { return r.nome.trim() || r.ufs.trim(); }).map(function (r) { return { nome: r.nome, ufs: r.ufs.split(/[\s,;]+/).filter(Boolean), preco: lerReais(r.preco || "0"), prazo: String(r.prazo).trim() === "" ? null : Number(r.prazo) }; }),
@@ -856,6 +857,7 @@
       secao("Contato"),
       h("div", { class: "grade3" }, campo("WhatsApp", f.whatsapp, "Com 55 e DDD, só números."), campo("Instagram", f.instagram, "Só o usuário, sem @."), campo("E-mail", f.email)),
       secao("Prazo de entrega"),
+      h("div", { class: "grade2" }, campo("Prazo para enviar o pedido (dias úteis)", f.envio, "Aparece no e-mail de pagamento confirmado, na página do pedido e em Prazos e Envio: “seu pedido será enviado em até X dias úteis”. Use 0 para não informar."), h("div")),
       h("div", { class: "grade2" }, campo("Dias úteis a somar ao prazo de transporte", f.dias, "Margem de segurança: somada automaticamente ao transporte de cada entrega, e o cliente vê um prazo único contado a partir do envio. Ex.: transporte 2 + margem 3 = “em até 5 dias úteis após o envio”."), campo("Frete único (R$)", f.frete, "Usado só se não houver nenhuma região cadastrada. Cupom de frete grátis zera.")),
       campo("Aviso de prazo", f.aviso, "Aparece na vitrine, no produto e no carrinho."),
       secao("Entrega e frete", "Por enquanto o frete é por região (valor fixo). O cálculo automático pelo Melhor Envio entra depois. O cliente informa o CEP e escolhe uma das opções do estado dele."),

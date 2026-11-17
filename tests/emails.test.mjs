@@ -44,12 +44,18 @@ await Promise.all([1, 2, 3].map(() => aplicarPagamento(env, r1.token, { status: 
 es = await emailsDe(r1.token);
 const pago = es.find((e) => e.tipo === "pago");
 t("pagamento (mesmo com 3 avisos repetidos) gera UM e-mail 'pago'", es.filter((e) => e.tipo === "pago").length === 1, es.map((e) => e.tipo));
-t("'pago' diz que o pedido será separado e enviado em breve, sem falar em produção", pago.html.includes("Em breve o seu pedido será separado e enviado") && !/produ[çc]/i.test(pago.html) && !/produ[çc]/i.test(pago.texto) && pago.assunto.startsWith("Pagamento confirmado"), pago.html.slice(pago.html.indexOf("Recebemos o pagamento"), pago.html.indexOf("Recebemos o pagamento") + 200));
+t("'pago' diz que o pedido será enviado em até 2 dias úteis (config), sem falar em produção", pago.html.includes("Seu pedido será enviado em até <b>2 dias úteis</b>") && pago.texto.includes("Seu pedido será enviado em até 2 dias úteis") && !/produ[çc]/i.test(pago.html) && !/produ[çc]/i.test(pago.texto) && pago.assunto.startsWith("Pagamento confirmado"), pago.html.slice(pago.html.indexOf("Recebemos o pagamento"), pago.html.indexOf("Recebemos o pagamento") + 200));
 await db.prepare("UPDATE pedidos SET frete_prazo_dias = 5 WHERE token = ?").bind(r1.token).run();
 await enfileirar(db, await idDe(r1.token), "pago", { env, forcar: true });
 const pago2 = (await emailsDe(r1.token)).find((e) => e.tipo === "pago");
 t("com previsão conhecida, 'pago' informa o prazo único (em até 5 dias úteis após o envio)", pago2.html.includes("em até <b>5 dias úteis</b>") && pago2.html.includes("após o envio do pedido") && pago2.texto.includes("em até 5 dias úteis"), pago2.html.slice(pago2.html.indexOf("Previs"), pago2.html.indexOf("Previs") + 160));
 await db.prepare("UPDATE pedidos SET frete_prazo_dias = NULL WHERE token = ?").bind(r1.token).run();
+await db.prepare("UPDATE config SET valor = '0' WHERE chave = 'prazo_postagem_dias_uteis'").run();
+await enfileirar(db, await idDe(r1.token), "pago", { env, forcar: true });
+const pago3 = (await emailsDe(r1.token)).find((e) => e.tipo === "pago");
+t("sem prazo de envio configurado (0), volta a dizer 'em breve ... separado e enviado'", pago3.html.includes("Em breve o seu pedido será separado e enviado") && !pago3.html.includes("em até <b>"), pago3.html.slice(pago3.html.indexOf("Recebemos"), pago3.html.indexOf("Recebemos") + 200));
+await db.prepare("UPDATE config SET valor = '2' WHERE chave = 'prazo_postagem_dias_uteis'").run();
+await enfileirar(db, await idDe(r1.token), "pago", { env, forcar: true });
 
 // ---- enviado, entregue ----
 const id1 = await idDe(r1.token);

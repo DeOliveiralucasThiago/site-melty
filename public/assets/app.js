@@ -494,9 +494,10 @@
       if (p.status === "cancelado") aviso = '<div class="notice">Este pedido foi cancelado. Se já pagou, fale com a gente pelo WhatsApp.</div>';
       if (p.status === "reembolsado") aviso = '<div class="notice">O pagamento deste pedido foi reembolsado.</div>';
       if (p.status === "aguardando_pagamento") aviso = '<div class="notice"><strong>Falta pagar.</strong> Reservamos seus itens até ' + esc(quando(p.expira_em)) + '. <p><a class="btn" href="' + esc(p.pagamento_url) + '">Pagar agora</a></p></div>';
+      var envioAviso = p.prazo_envio_dias ? '<div class="notice">Seu pedido será enviado em até <strong>' + p.prazo_envio_dias + " dias úteis</strong>. Assim que for postado, você recebe o código de rastreio por e-mail.</div>" : "";
       var rastreio = p.rastreio ? '<div class="notice"><strong>Código de rastreio:</strong> ' + esc(p.rastreio) + ' · <a href="' + esc(p.rastreio_url) + '" target="_blank" rel="noopener">acompanhar a entrega</a></div>' : "";
       app.innerHTML = '<div class="wrap page"><h1>Pedido #' + p.numero + "</h1><p class='muted'>Olá, " + esc(p.primeiro_nome) + "! Entrega em " + esc(p.cidade) + "/" + esc(p.uf) + (p.entrega ? " · " + esc(p.entrega) + (p.prazo_dias !== null && p.prazo_dias !== undefined ? " (previsão: até " + p.prazo_dias + " dias úteis após o envio)" : "") : "") + ".</p>" +
-        aviso + rastreio + etapas +
+        aviso + envioAviso + rastreio + etapas +
         "<h2>Itens</h2>" + p.itens.map(function (i) { return '<div class="linha-res"><span>' + i.qtd + "× " + esc(i.nome) + "</span><span>" + brl.format(i.subtotal) + "</span></div>"; }).join("") +
         '<div class="linha-res"><span>Subtotal</span><span>' + brl.format(p.subtotal) + "</span></div>" +
         (p.desconto > 0 ? '<div class="linha-res desc"><span>Desconto' + (p.cupom ? " (" + esc(p.cupom) + ")" : "") + "</span><span>− " + brl.format(p.desconto) + "</span></div>" : "") +

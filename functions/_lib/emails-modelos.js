@@ -64,9 +64,12 @@ export function montarEmail(tipo, ctx) {
     titulo = `Pagamento confirmado, ${nome}!`;
     const prev = pedido.frete_prazo_dias;
     const previsao = prev !== null && prev !== undefined ? `Previsão de entrega: em até <b>${prev} dias úteis</b> após o envio do pedido.` : "";
-    paragrafos = [`Recebemos o pagamento do pedido <b>#${num}</b>. Em breve o seu pedido será separado e enviado. Assim que for postado, enviamos o código de rastreio por aqui.`,
+    const envio = Number(c.envio_dias) || 0;
+    const fraseEnvio = envio > 0 ? `Seu pedido será enviado em até <b>${envio} dias úteis</b>` : "Em breve o seu pedido será separado e enviado";
+    const fraseEnvioTxt = envio > 0 ? `Seu pedido será enviado em até ${envio} dias úteis` : "Em breve o seu pedido será separado e enviado";
+    paragrafos = [`Recebemos o pagamento do pedido <b>#${num}</b>. ${fraseEnvio}. Assim que for postado, enviamos o código de rastreio por aqui.`,
       previsao, c.aviso_prazo ? `<span style="color:#75656a;font-size:14px">${esc(c.aviso_prazo)}</span>` : ""].filter(Boolean);
-    paragrafosTxt = [`Pagamento confirmado, ${nomeTxt}! Recebemos o pagamento do pedido #${num}. Em breve o seu pedido será separado e enviado. Assim que for postado, enviamos o código de rastreio.`,
+    paragrafosTxt = [`Pagamento confirmado, ${nomeTxt}! Recebemos o pagamento do pedido #${num}. ${fraseEnvioTxt}. Assim que for postado, enviamos o código de rastreio.`,
       prev !== null && prev !== undefined ? `Previsão de entrega: em até ${prev} dias úteis após o envio do pedido.` : "", c.aviso_prazo || ""];
   } else if (tipo === "enviado") {
     assunto = `Seu pedido #${num} está a caminho`;

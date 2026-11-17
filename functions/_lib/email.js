@@ -42,9 +42,9 @@ async function contexto(db, env, pedidoId) {
   const p = await db.prepare("SELECT * FROM pedidos WHERE id = ?").bind(pedidoId).first();
   if (!p) return null;
   const itens = (await db.prepare("SELECT nome, qtd, unitario_centavos FROM pedido_itens WHERE pedido_id = ? ORDER BY id").bind(pedidoId).all()).results;
-  const cfg = Object.fromEntries((await db.prepare("SELECT chave, valor FROM config WHERE chave IN ('loja','whatsapp','email','prazo_producao_dias_uteis','aviso_prazo')").all()).results.map((r) => [r.chave, JSON.parse(r.valor)]));
+  const cfg = Object.fromEntries((await db.prepare("SELECT chave, valor FROM config WHERE chave IN ('loja','whatsapp','email','prazo_producao_dias_uteis','prazo_postagem_dias_uteis','aviso_prazo')").all()).results.map((r) => [r.chave, JSON.parse(r.valor)]));
   const urlBase = (env?.SITE_URL || p.url_base || "").replace(/\/+$/, "");
-  return { pedido: { ...p, numero: numeroDoPedido(p.id) }, itens, config: { loja: cfg.loja || "Melty", whatsapp: cfg.whatsapp || "", email: cfg.email || "", prazo: cfg.prazo_producao_dias_uteis, aviso_prazo: cfg.aviso_prazo || "" }, urlBase };
+  return { pedido: { ...p, numero: numeroDoPedido(p.id) }, itens, config: { loja: cfg.loja || "Melty", whatsapp: cfg.whatsapp || "", email: cfg.email || "", prazo: cfg.prazo_producao_dias_uteis, envio_dias: Number(cfg.prazo_postagem_dias_uteis) || 0, aviso_prazo: cfg.aviso_prazo || "" }, urlBase };
 }
 
 /** Grava o e-mail na fila. Cada tipo sai uma vez por pedido; com forcar=true, regrava e reenvia. */
