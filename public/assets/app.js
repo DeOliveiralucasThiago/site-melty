@@ -351,7 +351,7 @@
       app.innerHTML = '<div class="wrap page"><h1>Finalizar compra</h1><p>O pagamento online ainda não está disponível. <a href="carrinho.html">Voltar ao carrinho</a> e finalizar pelo WhatsApp.</p></div>';
       return;
     }
-    var estado = { cupom: "", resumo: null, frete_id: "", opcoes: null, producao: 0 };
+    var estado = { cupom: "", resumo: null, frete_id: "", opcoes: null };
 
     function campo(id, rotulo, extra) {
       return '<div class="campo"><label for="' + id + '">' + rotulo + '</label><input id="' + id + '" name="' + id + '" ' + (extra || "") + " required></div>";
@@ -401,10 +401,8 @@
       return simular(!!estado.cupom).then(function (r) { if (r.ok) { estado.resumo = r.dados; desenharResumo(); } });
     }
     function textoPrazo(o) {
-      var partes = [];
-      if (estado.producao) partes.push("produção até " + estado.producao + " dias úteis");
-      if (o.prazo_dias_uteis !== null && o.prazo_dias_uteis !== undefined) partes.push("transporte " + o.prazo_dias_uteis + " dia(s) útil(eis) após a postagem");
-      return partes.join(" + ");
+      if (o.prazo_dias_uteis === null || o.prazo_dias_uteis === undefined) return "";
+      return "Entrega em até " + o.prazo_dias_uteis + " dias úteis, contados da confirmação do pagamento";
     }
     function desenharOpcoes() {
       var box = $("entrega");
@@ -424,7 +422,7 @@
       $("entrega").innerHTML = '<p class="small muted">Calculando…</p>';
       enviarJson("/api/frete/cotar", { itens: itens, cep: cepD }).then(function (r) {
         if (!r.ok) { $("entrega").innerHTML = '<p class="erro">' + esc(r.dados.erro || "Não foi possível calcular a entrega.") + "</p>"; return; }
-        estado.opcoes = r.dados.opcoes; estado.producao = r.dados.producao_dias;
+        estado.opcoes = r.dados.opcoes;
         if (r.dados.uf) $("uf").value = r.dados.uf;
         if (estado.opcoes.length === 1) estado.frete_id = estado.opcoes[0].id;
         desenharOpcoes(); atualizarResumo();
@@ -480,7 +478,7 @@
     if (!sql) return "";
     return new Date(sql.replace(" ", "T") + "Z").toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
   }
-  var ETAPAS = [["aguardando_pagamento", "Pedido recebido"], ["pago", "Pagamento confirmado"], ["em_producao", "Em produção"], ["enviado", "Enviado"], ["entregue", "Entregue"]];
+  var ETAPAS = [["aguardando_pagamento", "Pedido recebido"], ["pago", "Pagamento confirmado"], ["em_producao", "Preparando o pedido"], ["enviado", "Enviado"], ["entregue", "Entregue"]];
 
   function paginaPedido(d) {
     var token = new URLSearchParams(location.search).get("t") || "";
@@ -497,7 +495,7 @@
       if (p.status === "reembolsado") aviso = '<div class="notice">O pagamento deste pedido foi reembolsado.</div>';
       if (p.status === "aguardando_pagamento") aviso = '<div class="notice"><strong>Falta pagar.</strong> Reservamos seus itens até ' + esc(quando(p.expira_em)) + '. <p><a class="btn" href="' + esc(p.pagamento_url) + '">Pagar agora</a></p></div>';
       var rastreio = p.rastreio ? '<div class="notice"><strong>Código de rastreio:</strong> ' + esc(p.rastreio) + ' · <a href="' + esc(p.rastreio_url) + '" target="_blank" rel="noopener">acompanhar a entrega</a></div>' : "";
-      app.innerHTML = '<div class="wrap page"><h1>Pedido #' + p.numero + "</h1><p class='muted'>Olá, " + esc(p.primeiro_nome) + "! Entrega em " + esc(p.cidade) + "/" + esc(p.uf) + (p.entrega ? " · " + esc(p.entrega) + (p.prazo_transporte_dias !== null && p.prazo_transporte_dias !== undefined ? " (transporte: " + p.prazo_transporte_dias + " dia(s) útil(eis) após a postagem)" : "") : "") + ".</p>" +
+      app.innerHTML = '<div class="wrap page"><h1>Pedido #' + p.numero + "</h1><p class='muted'>Olá, " + esc(p.primeiro_nome) + "! Entrega em " + esc(p.cidade) + "/" + esc(p.uf) + (p.entrega ? " · " + esc(p.entrega) + (p.prazo_dias !== null && p.prazo_dias !== undefined ? " (previsão: até " + p.prazo_dias + " dias úteis, contados da confirmação do pagamento)" : "") : "") + ".</p>" +
         aviso + rastreio + etapas +
         "<h2>Itens</h2>" + p.itens.map(function (i) { return '<div class="linha-res"><span>' + i.qtd + "× " + esc(i.nome) + "</span><span>" + brl.format(i.subtotal) + "</span></div>"; }).join("") +
         '<div class="linha-res"><span>Subtotal</span><span>' + brl.format(p.subtotal) + "</span></div>" +

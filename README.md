@@ -26,20 +26,20 @@ Fluxo: carrinho → `checkout.html` (dados, endereço, cupom) → `POST /api/ped
 - O servidor recalcula tudo (preço, promoção, cupom, frete) e **reserva o estoque e o cupom por 30 min**. Se não pagar, o pedido vence e tudo volta
   (a limpeza roda sozinha quando alguém acessa a loja ou o painel). O estoque nunca fica negativo (o banco recusa) mesmo com compras simultâneas.
 - Cliente acompanha em `pedido.html?t=<código secreto de 32 caracteres>` (sem CPF, e-mail, telefone ou endereço completo na tela).
-- Painel > Pedidos: lista, dados de entrega, etapas (produção → enviado com rastreio → entregue), cancelar/reembolsado e alertas de conferência
+- Painel > Pedidos: lista, dados de entrega, etapas (em preparo → enviado com rastreio → entregue), cancelar/reembolsado e alertas de conferência
   (CPF de quem pagou diferente, valor menor, pagamento depois de vencer).
 - **Provedor de pagamento** (`functions/_lib/pagamento.js`): `PAGAMENTO_PROVEDOR=teste` ativa um pagamento simulado (só desenvolvimento, nunca em produção).
   **Mercado Pago ainda não está ligado**: falta validar na documentação oficial, com credenciais de teste, a assinatura do aviso (webhook),
   o formato do pagamento (inclui CPF do pagador?) e qual API usar (Preferences x Orders). Sem provedor, a loja mantém o botão de WhatsApp.
 - **Frete (Fase 4, parte sem Melhor Envio):** o cliente informa o CEP e escolhe a entrega; o servidor monta o pacote a partir dos produtos (peso e medidas, ou a
   caixa padrão; itens empilhados) e cota por região (valor fixo por estado, configurado em Painel > Textos e contato), com opção de frete grátis acima de um valor.
-  O estado vem do CEP (faixas em `functions/_lib/frete.js`, conferir antes de publicar). O prazo mostrado = produção + transporte após a postagem.
+  O estado vem do CEP (faixas em `functions/_lib/frete.js`, conferir antes de publicar). O prazo mostrado ao cliente é **único**: transporte + dias de preparo do pedido (somados pelo sistema), contado da confirmação do pagamento. Não se fala em "produção" para o cliente.
   O **Melhor Envio** entra no mesmo encaixe (`cotarFrete`), devolvendo opções no mesmo formato. Falta o token e conferir a documentação.
 
 ## E-mails automáticos (Fase 5)
 Cada mudança do pedido grava um e-mail numa **fila** (`emails`) e o envio acontece em seguida, com nova tentativa se falhar (a cada 5 min, até 5 vezes;
 e-mail com mais de 1 dia é descartado). Uma falha de e-mail nunca derruba o pedido. Cada tipo sai **uma vez por pedido**.
-Tipos: recebido, pago, enviado (com rastreio), entregue, cancelado, expirado e reembolsado. Em produção ("em produção") não há e-mail.
+Tipos: recebido, pago, enviado (com rastreio), entregue, cancelado, expirado e reembolsado. "Em preparo" não envia e-mail.
 Os e-mails não levam CPF nem endereço completo. No painel (Pedidos > detalhe) dá para ver, pré-visualizar e reenviar.
 - `EMAIL_PROVEDOR=teste`: não envia, só marca "simulado". `EMAIL_PROVEDOR=resend`: usa o Resend (precisa de `RESEND_API_KEY` como **segredo**,
   `EMAIL_REMETENTE`, ex.: `Melty <pedidos@mail.meltyvelas.com.br>`, e um **domínio verificado** no Resend com registros SPF/DKIM). O plano gratuito

@@ -47,7 +47,9 @@ const slug = (t) => String(t).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
 /**
  * Opções de entrega para um CEP.
  * entrada: { cep, linhas (itens do pedido calculado), subtotal_centavos }
- * saída: { uf, producao_dias, pacote, opcoes: [{ id, servico, transportadora, preco_centavos, prazo_dias_uteis, gratis }] }
+ * saída: { uf, preparo_dias, pacote, opcoes: [{ id, servico, transportadora, preco_centavos, transporte_dias, prazo_dias_uteis, gratis }] }
+ * prazo_dias_uteis é o que o cliente vê: transporte + dias de preparo do pedido (config prazo_producao_dias_uteis), contados da confirmação do pagamento.
+ * Com o Melhor Envio, "transporte_dias" será o prazo devolvido por eles e o preparo é somado da mesma forma.
  */
 export async function cotarFrete(db, env, { cep, linhas, subtotal_centavos }) {
   const c = await cfg(db, ["frete_regioes", "frete_provisorio", "frete_gratis_acima", "embalagem_padrao", "prazo_producao_dias_uteis"]);
@@ -56,16 +58,18 @@ export async function cotarFrete(db, env, { cep, linhas, subtotal_centavos }) {
   const gratisAcima = Math.round(Number(c.frete_gratis_acima || 0) * 100);
   const gratis = gratisAcima > 0 && subtotal_centavos >= gratisAcima;
   const regioes = Array.isArray(c.frete_regioes) ? c.frete_regioes : [];
+  const preparo = Math.max(0, Number(c.prazo_producao_dias_uteis) || 0);
 
   let opcoes;
   if (regioes.length) {
     opcoes = regioes.filter((r) => uf && r.ufs.includes(uf)).map((r) => ({
-      id: "regiao:" + slug(r.nome), servico: r.nome, transportadora: "", preco_centavos: Math.round(Number(r.preco) * 100), prazo_dias_uteis: r.prazo ?? null,
+      id: "regiao:" + slug(r.nome), servico: r.nome, transportadora: "", preco_centavos: Math.round(Number(r.preco) * 100),
+      transporte_dias: r.prazo ?? null, prazo_dias_uteis: r.prazo === null || r.prazo === undefined ? null : r.prazo + preparo,
     }));
   } else {
     // Nenhuma região configurada: um valor único provisório
-    opcoes = [{ id: "unico", servico: "Entrega", transportadora: "", preco_centavos: Math.round(Number(c.frete_provisorio || 0) * 100), prazo_dias_uteis: null }];
+    opcoes = [{ id: "unico", servico: "Entrega", transportadora: "", preco_centavos: Math.round(Number(c.frete_provisorio || 0) * 100), transporte_dias: null, prazo_dias_uteis: null }];
   }
   opcoes = opcoes.map((o) => (gratis ? { ...o, preco_centavos: 0, gratis: true } : { ...o, gratis: false }));
-  return { uf, producao_dias: Number(c.prazo_producao_dias_uteis) || 0, pacote, opcoes };
+  return { uf, preparo_dias: preparo, pacote, opcoes };
 }

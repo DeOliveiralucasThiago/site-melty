@@ -62,10 +62,12 @@ export function montarEmail(tipo, ctx) {
   } else if (tipo === "pago") {
     assunto = `Pagamento confirmado: pedido #${num}`;
     titulo = `Pagamento confirmado, ${nome}!`;
-    const dias = Number(c.prazo) || 0;
-    paragrafos = [`Recebemos o pagamento do pedido <b>#${num}</b>. Sua vela agora entra em produção${dias ? ` e fica pronta em até <b>${dias} dias úteis</b>` : ""}. Quando for postada, enviamos o código de rastreio por aqui.`,
-      c.aviso_prazo ? `<span style="color:#75656a;font-size:14px"><b>Prazo de entrega:</b> ${esc(c.aviso_prazo)}</span>` : ""].filter(Boolean);
-    paragrafosTxt = [`Pagamento confirmado, ${nomeTxt}! Recebemos o pagamento do pedido #${num}. Sua vela entra em produção${dias ? ` e fica pronta em até ${dias} dias úteis` : ""}. Quando for postada, enviamos o código de rastreio.`, c.aviso_prazo ? `Prazo de entrega: ${c.aviso_prazo}` : ""];
+    const prev = pedido.frete_prazo_dias;
+    const previsao = prev !== null && prev !== undefined ? `Previsão de entrega: em até <b>${prev} dias úteis</b>, contados da confirmação do pagamento.` : "";
+    paragrafos = [`Recebemos o pagamento do pedido <b>#${num}</b>. Em breve o seu pedido será separado e enviado. Assim que for postado, enviamos o código de rastreio por aqui.`,
+      previsao, c.aviso_prazo ? `<span style="color:#75656a;font-size:14px">${esc(c.aviso_prazo)}</span>` : ""].filter(Boolean);
+    paragrafosTxt = [`Pagamento confirmado, ${nomeTxt}! Recebemos o pagamento do pedido #${num}. Em breve o seu pedido será separado e enviado. Assim que for postado, enviamos o código de rastreio.`,
+      prev !== null && prev !== undefined ? `Previsão de entrega: em até ${prev} dias úteis, contados da confirmação do pagamento.` : "", c.aviso_prazo || ""];
   } else if (tipo === "enviado") {
     assunto = `Seu pedido #${num} está a caminho`;
     titulo = `Seu pedido está a caminho, ${nome}!`;

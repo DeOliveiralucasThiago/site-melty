@@ -11,7 +11,7 @@ export const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", 
 export const MINUTOS_RESERVA = 30;
 const MOTIVO_EXPIRADO = "Pagamento não confirmado no prazo";
 export const STATUS_TEXTO = {
-  aguardando_pagamento: "Aguardando pagamento", pago: "Pago", em_producao: "Em produção", enviado: "Enviado",
+  aguardando_pagamento: "Aguardando pagamento", pago: "Pago", em_producao: "Em preparo", enviado: "Enviado",
   entregue: "Entregue", cancelado: "Cancelado", reembolsado: "Reembolsado",
 };
 export const REVISAO_TEXTO = {
@@ -218,7 +218,7 @@ export async function paraAcompanhamento(db, p) {
   const espera = p.status === "aguardando_pagamento";
   return {
     numero: numeroDoPedido(p.id), status: p.status, status_texto: STATUS_TEXTO[p.status],
-    primeiro_nome: p.cliente_nome.split(" ")[0], cidade: p.end_cidade, uf: p.end_uf, entrega: p.frete_servico, prazo_transporte_dias: p.frete_prazo_dias,
+    primeiro_nome: p.cliente_nome.split(" ")[0], cidade: p.end_cidade, uf: p.end_uf, entrega: p.frete_servico, prazo_dias: p.frete_prazo_dias,
     itens: itens.map((i) => ({ nome: i.nome, qtd: i.qtd, unitario: i.unitario_centavos / 100, subtotal: (i.unitario_centavos * i.qtd) / 100 })),
     subtotal: p.subtotal_centavos / 100, desconto: p.desconto_centavos / 100, frete: p.frete_centavos / 100, total: p.total_centavos / 100, cupom: p.cupom_codigo,
     rastreio: p.rastreio, rastreio_url: p.rastreio ? `https://melhorrastreio.com.br/rastreio/${encodeURIComponent(p.rastreio)}` : "",

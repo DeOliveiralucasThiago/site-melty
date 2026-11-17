@@ -462,10 +462,10 @@
 
 
   /* ========== PEDIDOS ========== */
-  var STATUS_PED = { aguardando_pagamento: ["Aguardando pagamento", "cinza"], pago: ["Pago", ""], em_producao: ["Em produção", ""], enviado: ["Enviado", ""], entregue: ["Entregue", ""], cancelado: ["Cancelado", "cinza"], reembolsado: ["Reembolsado", "cinza"] };
+  var STATUS_PED = { aguardando_pagamento: ["Aguardando pagamento", "cinza"], pago: ["Pago", ""], em_producao: ["Em preparo", ""], enviado: ["Enviado", ""], entregue: ["Entregue", ""], cancelado: ["Cancelado", "cinza"], reembolsado: ["Reembolsado", "cinza"] };
   var PROXIMOS = { aguardando_pagamento: ["cancelado"], pago: ["em_producao", "enviado", "cancelado", "reembolsado"], em_producao: ["enviado", "cancelado", "reembolsado"], enviado: ["entregue", "cancelado", "reembolsado"], entregue: ["reembolsado"], cancelado: [], reembolsado: [] };
-  var ROTULO_ACAO = { em_producao: "Marcar em produção", enviado: "Marcar como enviado", entregue: "Marcar como entregue", cancelado: "Cancelar pedido", reembolsado: "Marcar como reembolsado" };
-  var EVENTO_TXT = { criado: "Pedido criado", pago: "Pagamento confirmado", em_producao: "Em produção", enviado: "Enviado", entregue: "Entregue", cancelado: "Cancelado", reembolsado: "Reembolsado", pagamento_recusado: "Pagamento recusado", revisao_resolvida: "Alerta conferido" };
+  var ROTULO_ACAO = { em_producao: "Marcar em preparo", enviado: "Marcar como enviado", entregue: "Marcar como entregue", cancelado: "Cancelar pedido", reembolsado: "Marcar como reembolsado" };
+  var EVENTO_TXT = { criado: "Pedido criado", pago: "Pagamento confirmado", em_producao: "Em preparo", enviado: "Enviado", entregue: "Entregue", cancelado: "Cancelado", reembolsado: "Reembolsado", pagamento_recusado: "Pagamento recusado", revisao_resolvida: "Alerta conferido" };
   function dataHora(sql) { return sql ? new Date(sql.replace(" ", "T") + "Z").toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""; }
   function fmtCpf(c) { return c.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4"); }
   function fmtTel(t) { return t.length === 11 ? t.replace(/^(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3") : t.replace(/^(\d{2})(\d{4})(\d{4})$/, "($1) $2-$3"); }
@@ -506,7 +506,7 @@
     }
     filtro.addEventListener("change", carregar);
     main.appendChild(h("h1", null, "Pedidos"));
-    main.appendChild(h("p", { class: "dica" }, "Pedidos “Pago” são os que você precisa produzir e enviar. Pedidos marcados “Conferir” têm um alerta (por exemplo, CPF de quem pagou diferente do informado)."));
+    main.appendChild(h("p", { class: "dica" }, "Pedidos “Pago” são os que você precisa separar e enviar. Pedidos marcados “Conferir” têm um alerta (por exemplo, CPF de quem pagou diferente do informado)."));
     main.appendChild(h("div", { class: "barra" }, h("div", { class: "espaco" }, filtro), h("button", { class: "btn sec", onclick: carregar }, "Atualizar")));
     main.appendChild(lista);
     main.appendChild(h("h2", null, "Planilha e cópia de segurança"));
@@ -554,7 +554,7 @@
     corpo.appendChild(h("p", null, c.nome, h("br"), c.email, h("br"), fmtTel(c.telefone) + " · ", h("a", { href: "https://wa.me/55" + c.telefone, target: "_blank", rel: "noopener" }, "abrir no WhatsApp"), h("br"), "CPF " + fmtCpf(c.cpf)));
     corpo.appendChild(h("h2", null, "Entrega"));
     corpo.appendChild(h("p", { class: "endereco" }, textoEnd));
-    if (p.entrega) corpo.appendChild(h("p", { class: "dica" }, "Forma de entrega escolhida: " + p.entrega + (p.prazo_transporte_dias !== null && p.prazo_transporte_dias !== undefined ? " (transporte: " + p.prazo_transporte_dias + " dia(s) útil(eis))" : "")));
+    if (p.entrega) corpo.appendChild(h("p", { class: "dica" }, "Forma de entrega escolhida: " + p.entrega + (p.prazo_dias !== null && p.prazo_dias !== undefined ? " (previsão: " + p.prazo_dias + " dias úteis)" : "")));
     corpo.appendChild(h("div", { class: "barra" }, h("button", { class: "btn sec mini", type: "button", onclick: function () { copiar(textoEnd); } }, "Copiar endereço")));
 
     corpo.appendChild(h("h2", null, "Itens"));
@@ -717,7 +717,7 @@
   function abaPaginas(main) {
     var lista = h("div");
     main.appendChild(h("h1", null, "Páginas"));
-    main.appendChild(h("p", { class: "dica" }, "Textos fixos da loja. No texto, você pode usar {{email}}, {{whatsapp}}, {{loja}}, {{prazo_producao}} e {{aviso_prazo}}: eles são trocados pelos dados atuais da loja, então não precisam ser reescritos se algo mudar. Os textos são um ponto de partida e devem ser revisados por um contador ou advogado antes de a loja abrir."));
+    main.appendChild(h("p", { class: "dica" }, "Textos fixos da loja. No texto, você pode usar {{email}}, {{whatsapp}}, {{loja}} e {{aviso_prazo}}: eles são trocados pelos dados atuais da loja, então não precisam ser reescritos se algo mudar. Os textos são um ponto de partida e devem ser revisados por um contador ou advogado antes de a loja abrir."));
     main.appendChild(lista);
     lista.appendChild(h("p", { class: "dica" }, "Carregando…"));
     api("GET", "/paginas").then(function (ps) {
@@ -744,7 +744,7 @@
             .then(function () { dlg.close(); return recarregar(); }).catch(function () {});
         } },
           h("h2", null, "Editar página"), h("label", null, "Título"), titulo, h("label", null, "Texto"), ed.el,
-          h("p", { class: "dica" }, "Use “Subtítulo” para separar as seções. Dados da loja: {{email}}, {{whatsapp}}, {{loja}}, {{prazo_producao}}, {{aviso_prazo}}."),
+          h("p", { class: "dica" }, "Use “Subtítulo” para separar as seções. Dados da loja: {{email}}, {{whatsapp}}, {{loja}}, {{aviso_prazo}}."),
           h("label", { class: "chk" }, publicada, "Página visível na loja"),
           h("div", { class: "barra" }, h("button", { class: "btn", type: "submit" }, "Salvar"), h("button", { class: "btn sec", type: "button", onclick: function () { dlg.close(); } }, "Cancelar")));
       });
@@ -810,7 +810,7 @@
         function entrada(chave, rotulo, extra) { var el = h("input", Object.assign({ type: "text", value: r[chave], "aria-label": rotulo }, extra || {})); el.addEventListener("input", function () { r[chave] = el.value; }); return h("div", null, h("label", null, rotulo), el); }
         regBox.appendChild(h("div", { class: "cartao" },
           h("div", { class: "grade2" }, entrada("nome", "Nome da entrega", { maxlength: "40", placeholder: "Ex.: Grande Vitória" }), entrada("ufs", "Estados atendidos", { placeholder: "Ex.: ES, RJ, MG" })),
-          h("div", { class: "grade2" }, entrada("preco", "Preço (R$)", { inputmode: "decimal" }), entrada("prazo", "Transporte (dias úteis, opcional)", { inputmode: "numeric" })),
+          h("div", { class: "grade2" }, entrada("preco", "Preço (R$)", { inputmode: "decimal" }), entrada("prazo", "Transporte (dias úteis)", { inputmode: "numeric", placeholder: "O preparo é somado sozinho" })),
           h("div", { class: "barra" }, h("button", { class: "btn perigo mini", type: "button", onclick: function () { estado.regioes.splice(i, 1); mostrarRegioes(); } }, "Remover região"))));
       });
     }
@@ -856,7 +856,7 @@
       secao("Contato"),
       h("div", { class: "grade3" }, campo("WhatsApp", f.whatsapp, "Com 55 e DDD, só números."), campo("Instagram", f.instagram, "Só o usuário, sem @."), campo("E-mail", f.email)),
       secao("Prazo de entrega"),
-      h("div", { class: "grade2" }, campo("Dias úteis de produção", f.dias, "Usado na página Prazos e Envio."), campo("Frete único (R$)", f.frete, "Usado só se não houver nenhuma região cadastrada. Cupom de frete grátis zera.")),
+      h("div", { class: "grade2" }, campo("Dias úteis de preparo do pedido", f.dias, "Somados automaticamente ao prazo de transporte de cada entrega: o cliente vê um prazo único. Ex.: transporte 2 + preparo 3 = “em até 5 dias úteis”."), campo("Frete único (R$)", f.frete, "Usado só se não houver nenhuma região cadastrada. Cupom de frete grátis zera.")),
       campo("Aviso de prazo", f.aviso, "Aparece na vitrine, no produto e no carrinho."),
       secao("Entrega e frete", "Por enquanto o frete é por região (valor fixo). O cálculo automático pelo Melhor Envio entra depois. O cliente informa o CEP e escolhe uma das opções do estado dele."),
       (!estado.regioes.length && !Number(c.frete_provisorio) ? h("div", { class: "alerta" }, "⚠ Nenhum frete configurado: os pedidos sairão com frete R$ 0,00. Cadastre as regiões ou o frete único.") : null),

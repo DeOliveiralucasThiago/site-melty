@@ -41,7 +41,7 @@ await setCfg("frete_regioes", [
   { nome: "Entrega expressa", ufs: ["ES", "RJ"], preco: 40, prazo: 1 },
 ]);
 q = await cotarFrete(db, env, { cep: "29100000", linhas: linhas(1), subtotal_centavos: 7990 });
-t("ES: duas opções (padrão e expressa)", q.uf === "ES" && q.opcoes.map((o) => o.servico).join() === "Entrega ES,Entrega expressa" && q.opcoes[0].preco_centavos === 1500 && q.opcoes[1].prazo_dias_uteis === 1, JSON.stringify(q.opcoes));
+t("ES: duas opções (padrão e expressa)", q.uf === "ES" && q.opcoes.map((o) => o.servico).join() === "Entrega ES,Entrega expressa" && q.opcoes[0].preco_centavos === 1500 && q.opcoes[1].transporte_dias === 1 && q.opcoes[1].prazo_dias_uteis === 4, JSON.stringify(q.opcoes));
 q = await cotarFrete(db, env, { cep: "01001000", linhas: linhas(1), subtotal_centavos: 7990 });
 t("SP: região Sudeste a R$ 25,50", q.uf === "SP" && q.opcoes.length === 1 && q.opcoes[0].preco_centavos === 2550, JSON.stringify(q.opcoes));
 q = await cotarFrete(db, env, { cep: "69900000", linhas: linhas(1), subtotal_centavos: 7990 });
@@ -54,12 +54,27 @@ t("abaixo do limite continua cobrando", q.opcoes[0].preco_centavos === 1500 && !
 await setCfg("frete_gratis_acima", 0);
 await setCfg("prazo_producao_dias_uteis", 3);
 q = await cotarFrete(db, env, { cep: "29100000", linhas: linhas(1), subtotal_centavos: 7990 });
-t("cotação informa os dias de produção", q.producao_dias === 3);
+t("prazo único = transporte + preparo (3+3=6 e 1+3=4)", q.preparo_dias === 3 && q.opcoes[0].transporte_dias === 3 && q.opcoes[0].prazo_dias_uteis === 6 && q.opcoes[1].prazo_dias_uteis === 4, JSON.stringify(q.opcoes));
+await setCfg("prazo_producao_dias_uteis", 2);
+q = await cotarFrete(db, env, { cep: "29100000", linhas: linhas(1), subtotal_centavos: 7990 });
+t("mudando o preparo para 2 dias, o prazo se ajusta sozinho (5 e 3)", q.opcoes[0].prazo_dias_uteis === 5 && q.opcoes[1].prazo_dias_uteis === 3);
+await setCfg("prazo_producao_dias_uteis", 0);
+q = await cotarFrete(db, env, { cep: "29100000", linhas: linhas(1), subtotal_centavos: 7990 });
+t("sem dias de preparo, o prazo é só o do transporte", q.opcoes[0].prazo_dias_uteis === 3);
+await setCfg("frete_regioes", [{ nome: "Sem prazo", ufs: ["ES"], preco: 10, prazo: null }, { nome: "Entrega ES", ufs: ["SP"], preco: 15, prazo: 3 }, { nome: "Sudeste", ufs: ["SP", "RJ", "MG"], preco: 25.5, prazo: 5 }, { nome: "Entrega expressa", ufs: ["ES", "RJ"], preco: 40, prazo: 1 }]);
+await setCfg("prazo_producao_dias_uteis", 3);
+q = await cotarFrete(db, env, { cep: "29100000", linhas: linhas(1), subtotal_centavos: 7990 });
+t("região sem prazo de transporte informado: não inventa previsão", q.opcoes.find((o) => o.servico === "Sem prazo").prazo_dias_uteis === null);
+await setCfg("frete_regioes", [
+  { nome: "Entrega ES", ufs: ["ES"], preco: 15, prazo: 3 },
+  { nome: "Sudeste", ufs: ["SP", "RJ", "MG"], preco: 25.5, prazo: 5 },
+  { nome: "Entrega expressa", ufs: ["ES", "RJ"], preco: 40, prazo: 1 },
+]);
 
 // ---- pedido com a forma de entrega ----
 const r1 = await pedir(0, [{ id: "bamboo-dreams", qtd: 1 }], { frete_id: "regiao:entrega-expressa" });
 const p1 = await db.prepare("SELECT * FROM pedidos WHERE token = ?").bind(r1.token).first();
-t("pedido guarda a forma de entrega, o preço e o prazo", p1.frete_servico === "Entrega expressa" && p1.frete_id === "regiao:entrega-expressa" && p1.frete_centavos === 4000 && p1.frete_prazo_dias === 1 && p1.total_centavos === 7990 + 4000, JSON.stringify(p1));
+t("pedido guarda a forma de entrega, o preço e a previsão (transporte 1 + preparo 3 = 4)", p1.frete_servico === "Entrega expressa" && p1.frete_id === "regiao:entrega-expressa" && p1.frete_centavos === 4000 && p1.frete_prazo_dias === 4 && p1.total_centavos === 7990 + 4000, JSON.stringify(p1));
 t("com 2 opções, precisa escolher", (await cod(() => pedir(1, [{ id: "cereja-avela", qtd: 1 }]))) === "frete");
 t("opção inexistente é recusada", (await cod(() => pedir(1, [{ id: "cereja-avela", qtd: 1 }], { frete_id: "regiao:inventada" }))) === "frete");
 t("opção de OUTRA região é recusada (SP não tem 'Entrega ES')", (await cod(() => pedir(1, [{ id: "cereja-avela", qtd: 1 }], { cep: "01001-000", uf: "SP", frete_id: "regiao:entrega-es" }))) === "frete");

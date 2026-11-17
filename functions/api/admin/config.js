@@ -19,7 +19,7 @@ const VALIDADORES = {
   whatsapp: (x) => { const d = String(x ?? "").replace(/\D/g, ""); if (d.length < 12 || d.length > 15) throw new Error("WhatsApp: use o número com código do país e DDD (ex.: 5527999999999)."); return d; },
   instagram: (x) => { const t = String(x ?? "").trim().replace(/^@/, ""); if (!/^[A-Za-z0-9._]{1,30}$/.test(t)) throw new Error("Instagram: informe só o nome de usuário."); return t; },
   email: (x) => { const t = v.texto(x, "E-mail", { max: 120, obrigatorio: true }); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) throw new Error("E-mail inválido."); return t; },
-  prazo_producao_dias_uteis: (x) => v.inteiro(x, "Dias de produção", 0, 60),
+  prazo_producao_dias_uteis: (x) => v.inteiro(x, "Dias de preparo", 0, 60),
   frete_regioes: (x) => {
     if (!Array.isArray(x) || x.length > 20) throw new Error("Entrega por região: no máximo 20 regiões.");
     return x.map((r) => {

@@ -5,16 +5,32 @@
   "instagram": "meltyvelas",
   "email": "meltyvelas@gmail.com",
   "prazo_producao_dias_uteis": 3,
-  "aviso_prazo": "O prazo é estimado e começa a contar após a postagem do pedido. Pode variar conforme a região e imprevistos dos Correios.",
+  "aviso_prazo": "O prazo de entrega é uma estimativa, contada a partir da confirmação do pagamento, e já inclui a separação e o envio do pedido. Pode variar conforme a região e imprevistos dos Correios.",
   "faixa_avisos": [
     "Velas aromáticas artesanais, feitas com carinho",
-    "Produção em até 3 dias úteis"
+    "Frete calculado pelo seu CEP"
   ],
   "beneficios": [
-    {"icone":"mao","titulo":"Feito à mão","texto":"Cada vela é preparada com cuidado"},
-    {"icone":"cartao","titulo":"Pix e cartão","texto":"Pagamento online seguro"},
-    {"icone":"caixa","titulo":"Envio para todo o Brasil","texto":"Frete calculado pelo seu CEP"},
-    {"icone":"zap","titulo":"Ficou em dúvida?","texto":"Chama no WhatsApp"}
+    {
+      "icone": "mao",
+      "titulo": "Feito à mão",
+      "texto": "Cada vela é preparada com cuidado"
+    },
+    {
+      "icone": "cartao",
+      "titulo": "Pix e cartão",
+      "texto": "Pagamento online seguro"
+    },
+    {
+      "icone": "caixa",
+      "titulo": "Envio para todo o Brasil",
+      "texto": "Frete calculado pelo seu CEP"
+    },
+    {
+      "icone": "zap",
+      "titulo": "Ficou em dúvida?",
+      "texto": "Chama no WhatsApp"
+    }
   ],
   "quem_somos": {
     "titulo": "Quem somos",

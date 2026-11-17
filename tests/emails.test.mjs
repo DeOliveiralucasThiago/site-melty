@@ -44,12 +44,17 @@ await Promise.all([1, 2, 3].map(() => aplicarPagamento(env, r1.token, { status: 
 es = await emailsDe(r1.token);
 const pago = es.find((e) => e.tipo === "pago");
 t("pagamento (mesmo com 3 avisos repetidos) gera UM e-mail 'pago'", es.filter((e) => e.tipo === "pago").length === 1, es.map((e) => e.tipo));
-t("'pago' informa produção em 3 dias úteis e o aviso de prazo", pago.html.includes("3 dias úteis") && pago.html.includes("Prazo de entrega") && pago.assunto.startsWith("Pagamento confirmado"));
+t("'pago' diz que o pedido será separado e enviado em breve, sem falar em produção", pago.html.includes("Em breve o seu pedido será separado e enviado") && !/produ[çc]/i.test(pago.html) && !/produ[çc]/i.test(pago.texto) && pago.assunto.startsWith("Pagamento confirmado"), pago.html.slice(pago.html.indexOf("Recebemos o pagamento"), pago.html.indexOf("Recebemos o pagamento") + 200));
+await db.prepare("UPDATE pedidos SET frete_prazo_dias = 5 WHERE token = ?").bind(r1.token).run();
+await enfileirar(db, await idDe(r1.token), "pago", { env, forcar: true });
+const pago2 = (await emailsDe(r1.token)).find((e) => e.tipo === "pago");
+t("com previsão conhecida, 'pago' informa o prazo único (em até 5 dias úteis, da confirmação do pagamento)", pago2.html.includes("em até <b>5 dias úteis</b>") && pago2.html.includes("contados da confirmação do pagamento") && pago2.texto.includes("em até 5 dias úteis"), pago2.html.slice(pago2.html.indexOf("Previs"), pago2.html.indexOf("Previs") + 160));
+await db.prepare("UPDATE pedidos SET frete_prazo_dias = NULL WHERE token = ?").bind(r1.token).run();
 
 // ---- enviado, entregue ----
 const id1 = await idDe(r1.token);
 await mudarStatus(db, id1, "em_producao", { env });
-t("'em produção' não envia e-mail (só aviso no painel)", (await emailsDe(r1.token)).every((e) => e.tipo !== "em_producao"));
+t("'em preparo' não envia e-mail (só aviso no painel)", (await emailsDe(r1.token)).every((e) => e.tipo !== "em_producao"));
 await mudarStatus(db, id1, "enviado", { rastreio: "ab123456789br", env });
 const env1 = (await emailsDe(r1.token)).find((e) => e.tipo === "enviado");
 t("'enviado' traz o rastreio e o link de rastreio", env1.html.includes("AB123456789BR") && env1.html.includes("https://melhorrastreio.com.br/rastreio/AB123456789BR") && env1.texto.includes("AB123456789BR"));

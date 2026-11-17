@@ -13,7 +13,7 @@ export async function onRequestPost({ request, env }) {
     const c = await calcularPedido(env.DB, env, { itens: corpo.itens });
     const q = await cotarFrete(env.DB, env, { cep, linhas: c.itens, subtotal_centavos: c.subtotal_centavos });
     return json({
-      uf: q.uf, producao_dias: q.producao_dias,
+      uf: q.uf,
       opcoes: q.opcoes.map((o) => ({ id: o.id, servico: o.servico, transportadora: o.transportadora, preco: o.preco_centavos / 100, prazo_dias_uteis: o.prazo_dias_uteis, gratis: o.gratis })),
     });
   } catch (e) {
