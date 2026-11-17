@@ -350,7 +350,7 @@
       app.innerHTML = '<div class="wrap page"><h1>Finalizar compra</h1><p>O pagamento online ainda não está disponível. <a href="carrinho.html">Voltar ao carrinho</a> e finalizar pelo WhatsApp.</p></div>';
       return;
     }
-    var estado = { cupom: "", resumo: null };
+    var estado = { cupom: "", resumo: null, frete_id: "", opcoes: null, producao: 0 };
 
     function campo(id, rotulo, extra) {
       return '<div class="campo"><label for="' + id + '">' + rotulo + '</label><input id="' + id + '" name="' + id + '" ' + (extra || "") + " required></div>";
@@ -366,6 +366,7 @@
       '<div class="tres">' + campo("numero", "Número", 'maxlength="10"') + '<div class="campo"><label for="complemento">Complemento</label><input id="complemento" maxlength="40" autocomplete="address-line2"></div>' + campo("bairro", "Bairro", 'maxlength="60"') + "</div>" +
       '<div class="dois">' + campo("cidade", "Cidade", 'maxlength="60" autocomplete="address-level2"') +
       '<div class="campo"><label for="uf">Estado</label><select id="uf" required><option value="">Selecione</option>' + UFS.map(function (u) { return "<option>" + u + "</option>"; }).join("") + "</select></div></div>" +
+      '<h2>Forma de entrega</h2><div id="entrega"><p class="small muted">Informe o CEP para ver as opções de entrega.</p></div>' +
       "<h2>Cupom de desconto</h2>" +
       '<div class="cupom"><input id="cupom" maxlength="20" placeholder="Código do cupom" autocomplete="off"><button type="button" class="btn ghost" id="aplicar">Aplicar</button></div><p id="msgCupom" class="small" role="status"></p>' +
       '<label class="aceite"><input type="checkbox" id="aceite"> Li e concordo com a <a href="politica-de-privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>.</label>' +
@@ -375,6 +376,7 @@
 
     var $ = function (id) { return document.getElementById(id); };
     mascara($("cpf"), mCpf); mascara($("cep"), mCep); mascara($("telefone"), mTel);
+    $("cep").addEventListener("input", function () { clearTimeout(tCep); tCep = setTimeout(buscarFrete, 350); });
 
     function desenharResumo() {
       var r = estado.resumo; if (!r) return;
@@ -383,14 +385,49 @@
       }).join("") +
         '<div class="linha-res"><span>Subtotal</span><span>' + brl.format(r.subtotal) + "</span></div>" +
         (r.desconto > 0 ? '<div class="linha-res desc"><span>Desconto (' + esc(r.cupom.codigo) + ")</span><span>− " + brl.format(r.desconto) + "</span></div>" : "") +
-        '<div class="linha-res"><span>Frete</span><span>' + (r.frete > 0 ? brl.format(r.frete) : (r.frete_gratis ? "Grátis (cupom)" : "A combinar")) + "</span></div>" +
-        '<div class="linha-res total"><span>Total</span><span>' + brl.format(r.total) + "</span></div>" +
+        '<div class="linha-res"><span>Frete' + (r.entrega ? " (" + esc(r.entrega) + ")" : "") + "</span><span>" + (r.frete === null ? "informe o CEP" : (r.frete > 0 ? brl.format(r.frete) : "Grátis")) + "</span></div>" +
+        '<div class="linha-res total"><span>Total' + (r.frete === null ? " (sem frete)" : "") + "</span><span>" + brl.format(r.total) + "</span></div>" +
         '<p class="small muted">Valores conferidos pelo servidor no momento da compra.</p>' + avisoPrazo(d.config);
     }
     function simular(comCupom) {
       var corpo = { itens: itens };
       if (comCupom) { corpo.cupom = estado.cupom; corpo.cpf = $("cpf").value; }
+      var cepD = $("cep").value.replace(/\D/g, "");
+      if (cepD.length === 8 && (estado.frete_id || (estado.opcoes && estado.opcoes.length === 1))) { corpo.cep = cepD; corpo.frete_id = estado.frete_id; }
       return enviarJson("/api/cupom/simular", corpo);
+    }
+    function atualizarResumo() {
+      return simular(!!estado.cupom).then(function (r) { if (r.ok) { estado.resumo = r.dados; desenharResumo(); } });
+    }
+    function textoPrazo(o) {
+      var partes = [];
+      if (estado.producao) partes.push("produção até " + estado.producao + " dias úteis");
+      if (o.prazo_dias_uteis !== null && o.prazo_dias_uteis !== undefined) partes.push("transporte " + o.prazo_dias_uteis + " dia(s) útil(eis) após a postagem");
+      return partes.join(" + ");
+    }
+    function desenharOpcoes() {
+      var box = $("entrega");
+      if (!estado.opcoes) return;
+      if (!estado.opcoes.length) { box.innerHTML = '<p class="erro">Ainda não entregamos neste CEP. <a href="https://wa.me/' + esc(d.config.whatsapp) + '" rel="noopener">Fale com a gente pelo WhatsApp</a>.</p>'; return; }
+      box.innerHTML = estado.opcoes.map(function (o) {
+        return '<label class="opcao"><input type="radio" name="frete" value="' + esc(o.id) + '"' + (o.id === estado.frete_id ? " checked" : "") + "><span><b>" + esc(o.servico) + "</b> · " + (o.preco > 0 ? brl.format(o.preco) : "Grátis") +
+          (textoPrazo(o) ? '<br><span class="small muted">' + esc(textoPrazo(o)) + "</span>" : "") + "</span></label>";
+      }).join("");
+      box.querySelectorAll("input[name=frete]").forEach(function (r) { r.onchange = function () { estado.frete_id = r.value; atualizarResumo(); }; });
+    }
+    var tCep = null;
+    function buscarFrete() {
+      var cepD = $("cep").value.replace(/\D/g, "");
+      estado.opcoes = null; estado.frete_id = "";
+      if (cepD.length !== 8) { $("entrega").innerHTML = '<p class="small muted">Informe o CEP para ver as opções de entrega.</p>'; atualizarResumo(); return; }
+      $("entrega").innerHTML = '<p class="small muted">Calculando…</p>';
+      enviarJson("/api/frete/cotar", { itens: itens, cep: cepD }).then(function (r) {
+        if (!r.ok) { $("entrega").innerHTML = '<p class="erro">' + esc(r.dados.erro || "Não foi possível calcular a entrega.") + "</p>"; return; }
+        estado.opcoes = r.dados.opcoes; estado.producao = r.dados.producao_dias;
+        if (r.dados.uf) $("uf").value = r.dados.uf;
+        if (estado.opcoes.length === 1) estado.frete_id = estado.opcoes[0].id;
+        desenharOpcoes(); atualizarResumo();
+      }).catch(function () { $("entrega").innerHTML = '<p class="erro">Sem conexão. Tente de novo.</p>'; });
     }
     simular(false).then(function (r) {
       if (!r.ok) { $("resumo").innerHTML = '<p class="erro">' + esc(r.dados.erro || "Não foi possível calcular.") + '</p><p><a href="carrinho.html">Voltar ao carrinho</a></p>'; $("enviar").disabled = true; return; }
@@ -416,12 +453,14 @@
       if (falta.length) { erro.textContent = "Preencha todos os campos obrigatórios."; $(falta[0]).focus(); return; }
       if (v("email").toLowerCase() !== v("email2").toLowerCase()) { erro.textContent = "Os dois e-mails não são iguais. Confira para receber os avisos do pedido."; $("email2").focus(); return; }
       if (!cpfValido(v("cpf"))) { erro.textContent = "CPF inválido."; $("cpf").focus(); return; }
+      if (!estado.opcoes || !estado.opcoes.length) { erro.textContent = "Escolha uma forma de entrega (informe o CEP)."; $("cep").focus(); return; }
+      if (!estado.frete_id) { erro.textContent = "Escolha uma forma de entrega."; return; }
       if (!$("aceite").checked) { erro.textContent = "É preciso aceitar a Política de Privacidade para continuar."; return; }
       var botao = $("enviar"); botao.disabled = true; botao.textContent = "Criando o pedido…";
       enviarJson("/api/pedidos", {
         itens: itens,
         cliente: { nome: v("nome"), email: v("email"), telefone: v("telefone"), cpf: v("cpf"), cep: v("cep"), rua: v("rua"), numero: v("numero"), complemento: v("complemento"),
-                   bairro: v("bairro"), cidade: v("cidade"), uf: v("uf"), cupom: estado.cupom, aceite: true }
+                   bairro: v("bairro"), cidade: v("cidade"), uf: v("uf"), cupom: estado.cupom, frete_id: estado.frete_id, aceite: true }
       }).then(function (r) {
         if (!r.ok) {
           erro.textContent = (r.dados && r.dados.erro) || "Não foi possível criar o pedido.";
@@ -457,7 +496,7 @@
       if (p.status === "reembolsado") aviso = '<div class="notice">O pagamento deste pedido foi reembolsado.</div>';
       if (p.status === "aguardando_pagamento") aviso = '<div class="notice"><strong>Falta pagar.</strong> Reservamos seus itens até ' + esc(quando(p.expira_em)) + '. <p><a class="btn" href="' + esc(p.pagamento_url) + '">Pagar agora</a></p></div>';
       var rastreio = p.rastreio ? '<div class="notice"><strong>Código de rastreio:</strong> ' + esc(p.rastreio) + ' · <a href="' + esc(p.rastreio_url) + '" target="_blank" rel="noopener">acompanhar a entrega</a></div>' : "";
-      app.innerHTML = '<div class="wrap page"><h1>Pedido #' + p.numero + "</h1><p class='muted'>Olá, " + esc(p.primeiro_nome) + "! Entrega em " + esc(p.cidade) + "/" + esc(p.uf) + ".</p>" +
+      app.innerHTML = '<div class="wrap page"><h1>Pedido #' + p.numero + "</h1><p class='muted'>Olá, " + esc(p.primeiro_nome) + "! Entrega em " + esc(p.cidade) + "/" + esc(p.uf) + (p.entrega ? " · " + esc(p.entrega) + (p.prazo_transporte_dias !== null && p.prazo_transporte_dias !== undefined ? " (transporte: " + p.prazo_transporte_dias + " dia(s) útil(eis) após a postagem)" : "") : "") + ".</p>" +
         aviso + rastreio + etapas +
         "<h2>Itens</h2>" + p.itens.map(function (i) { return '<div class="linha-res"><span>' + i.qtd + "× " + esc(i.nome) + "</span><span>" + brl.format(i.subtotal) + "</span></div>"; }).join("") +
         '<div class="linha-res"><span>Subtotal</span><span>' + brl.format(p.subtotal) + "</span></div>" +

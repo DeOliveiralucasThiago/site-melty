@@ -1,9 +1,11 @@
 // Textos e configurações da loja. Cada chave é validada; só as chaves enviadas são alteradas.
 import { json, erro, lerJson, ID_IMAGEM } from "../../_lib/util.js";
+import { UFS } from "../../_lib/frete.js";
 import * as v from "../../_lib/validar.js";
 import { todasExistem, limparOrfas } from "../../_lib/imagens.js";
 
 const ICONES = ["mao", "cartao", "caixa", "zap"];
+
 
 async function imagemOuNulo(db, id, nome) {
   if (!id) return null;
@@ -18,6 +20,17 @@ const VALIDADORES = {
   instagram: (x) => { const t = String(x ?? "").trim().replace(/^@/, ""); if (!/^[A-Za-z0-9._]{1,30}$/.test(t)) throw new Error("Instagram: informe só o nome de usuário."); return t; },
   email: (x) => { const t = v.texto(x, "E-mail", { max: 120, obrigatorio: true }); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) throw new Error("E-mail inválido."); return t; },
   prazo_producao_dias_uteis: (x) => v.inteiro(x, "Dias de produção", 0, 60),
+  frete_regioes: (x) => {
+    if (!Array.isArray(x) || x.length > 20) throw new Error("Entrega por região: no máximo 20 regiões.");
+    return x.map((r) => {
+      const ufs = (Array.isArray(r.ufs) ? r.ufs : []).map((u) => String(u).trim().toUpperCase());
+      if (!ufs.length || ufs.some((u) => !UFS.includes(u))) throw new Error(`Região “${r.nome ?? ""}”: informe estados válidos (ex.: ES, RJ, MG).`);
+      return { nome: v.texto(r.nome, "Nome da região", { max: 40, obrigatorio: true }), ufs: [...new Set(ufs)], preco: v.decimal(r.preco ?? 0, "Preço da entrega", 0, 500),
+               prazo: r.prazo === "" || r.prazo === null || r.prazo === undefined ? null : v.inteiro(r.prazo, "Prazo de transporte (dias úteis)", 0, 60) };
+    });
+  },
+  frete_gratis_acima: (x) => v.decimal(x ?? 0, "Frete grátis a partir de", 0, 100000),
+  embalagem_padrao: (x) => ({ altura: v.decimal(x?.altura, "Altura da caixa padrão", 1, 105), largura: v.decimal(x?.largura, "Largura da caixa padrão", 1, 105), comprimento: v.decimal(x?.comprimento, "Comprimento da caixa padrão", 1, 105) }),
   frete_provisorio: (x) => v.decimal(x ?? 0, "Frete provisório", 0, 500),
   aviso_prazo: (x) => v.texto(x, "Aviso de prazo", { max: 400 }),
   faixa_avisos: (x) => v.listaDeTextos(x, "Faixa de avisos", 5, 100),

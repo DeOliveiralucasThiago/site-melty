@@ -67,7 +67,8 @@ export async function calcularPedido(db, env, entrada, { agora = new Date() } = 
     if (p.estoque < it.qtd) throw new ErroNegocio(p.estoque > 0 ? `Só temos ${p.estoque} unidade(s) de ${p.nome}.` : `${p.nome} está esgotada.`, "estoque");
     const preco = precoVigente(p, agora);
     return { id: p.id, nome: p.nome, categoria: p.categoria_id, qtd: it.qtd, unitario: preco.centavos, cheio: preco.cheio, promocao: preco.promocao,
-             subtotal: preco.centavos * it.qtd, peso_kg: p.peso_kg };
+             subtotal: preco.centavos * it.qtd, peso_kg: p.peso_kg,
+             altura_cm: p.altura_cm, largura_cm: p.largura_cm, comprimento_cm: p.comprimento_cm };
   });
   const subtotal = linhas.reduce((s, l) => s + l.subtotal, 0);
   const resultado = { itens: linhas, subtotal_centavos: subtotal, desconto_centavos: 0, frete_gratis: false, cupom: null };

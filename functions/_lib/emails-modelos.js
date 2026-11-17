@@ -30,13 +30,13 @@ function resumoHtml(pedido, itens) {
     itens.map((i) => linha(`${i.qtd}× ${esc(i.nome)}`, reais(i.unitario_centavos * i.qtd))).join("") +
     linha("Subtotal", reais(pedido.subtotal_centavos)) +
     (pedido.desconto_centavos > 0 ? linha(`Desconto${pedido.cupom_codigo ? " (" + esc(pedido.cupom_codigo) + ")" : ""}`, "− " + reais(pedido.desconto_centavos)) : "") +
-    linha("Frete", pedido.frete_centavos > 0 ? reais(pedido.frete_centavos) : "Grátis") +
+    linha("Frete" + (pedido.frete_servico ? " (" + esc(pedido.frete_servico) + ")" : ""), pedido.frete_centavos > 0 ? reais(pedido.frete_centavos) : "Grátis") +
     linha("Total", reais(pedido.total_centavos), true) + "</table>";
 }
 function resumoTexto(pedido, itens) {
   return [`Resumo do pedido #${pedido.numero}`, ...itens.map((i) => `- ${i.qtd}x ${i.nome}: ${reais(i.unitario_centavos * i.qtd)}`),
     `Subtotal: ${reais(pedido.subtotal_centavos)}`, ...(pedido.desconto_centavos > 0 ? [`Desconto: -${reais(pedido.desconto_centavos)}`] : []),
-    `Frete: ${pedido.frete_centavos > 0 ? reais(pedido.frete_centavos) : "Grátis"}`, `Total: ${reais(pedido.total_centavos)}`].join("\n");
+    `Frete${pedido.frete_servico ? " (" + pedido.frete_servico + ")" : ""}: ${pedido.frete_centavos > 0 ? reais(pedido.frete_centavos) : "Grátis"}`, `Total: ${reais(pedido.total_centavos)}`].join("\n");
 }
 
 /**

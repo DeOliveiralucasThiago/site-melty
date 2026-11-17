@@ -31,7 +31,10 @@ Fluxo: carrinho → `checkout.html` (dados, endereço, cupom) → `POST /api/ped
 - **Provedor de pagamento** (`functions/_lib/pagamento.js`): `PAGAMENTO_PROVEDOR=teste` ativa um pagamento simulado (só desenvolvimento, nunca em produção).
   **Mercado Pago ainda não está ligado**: falta validar na documentação oficial, com credenciais de teste, a assinatura do aviso (webhook),
   o formato do pagamento (inclui CPF do pagador?) e qual API usar (Preferences x Orders). Sem provedor, a loja mantém o botão de WhatsApp.
-- Frete: valor fixo provisório (Painel > Textos e contato) até o cálculo por CEP da Fase 4.
+- **Frete (Fase 4, parte sem Melhor Envio):** o cliente informa o CEP e escolhe a entrega; o servidor monta o pacote a partir dos produtos (peso e medidas, ou a
+  caixa padrão; itens empilhados) e cota por região (valor fixo por estado, configurado em Painel > Textos e contato), com opção de frete grátis acima de um valor.
+  O estado vem do CEP (faixas em `functions/_lib/frete.js`, conferir antes de publicar). O prazo mostrado = produção + transporte após a postagem.
+  O **Melhor Envio** entra no mesmo encaixe (`cotarFrete`), devolvendo opções no mesmo formato. Falta o token e conferir a documentação.
 
 ## E-mails automáticos (Fase 5)
 Cada mudança do pedido grava um e-mail numa **fila** (`emails`) e o envio acontece em seguida, com nova tentativa se falhar (a cada 5 min, até 5 vezes;

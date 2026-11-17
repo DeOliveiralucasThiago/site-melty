@@ -28,6 +28,11 @@ export async function lerProduto(db, c, { parcial = false, existente = null } = 
       if (cheio !== undefined && o.preco_promo_centavos >= cheio) throw new Error("Preço promocional: precisa ser menor que o preço normal.");
     }
   }
+  if (!parcial || "altura_cm" in c || "largura_cm" in c || "comprimento_cm" in c) {
+    const dims = ["altura_cm", "largura_cm", "comprimento_cm"].map((k) => (c[k] === undefined || c[k] === null || c[k] === "" ? null : v.decimal(c[k], "Medida (cm)", 1, 105)));
+    if (dims.some((x) => x === null) && dims.some((x) => x !== null)) throw new Error("Medidas: preencha altura, largura e comprimento (ou deixe as três vazias para usar a caixa padrão).");
+    [o.altura_cm, o.largura_cm, o.comprimento_cm] = dims;
+  }
   for (const k of ["novidade", "destaque", "ativo"]) if (!parcial || k in c) o[k] = v.bool(c[k]);
   if (!parcial || "categoria" in c) {
     if (c.categoria) {
@@ -45,7 +50,7 @@ export async function lerProduto(db, c, { parcial = false, existente = null } = 
 
 export function paraPainel(p) {
   return { id: p.id, nome: p.nome, descricao: sanitizarDescricao(p.descricao), preco: p.preco_centavos / 100, estoque: p.estoque, categoria: p.categoria_id,
-    peso_kg: p.peso_kg, preco_promo: p.preco_promo_centavos ? p.preco_promo_centavos / 100 : null, promo_inicio: p.promo_inicio, promo_fim: p.promo_fim,
+    peso_kg: p.peso_kg, altura_cm: p.altura_cm, largura_cm: p.largura_cm, comprimento_cm: p.comprimento_cm, preco_promo: p.preco_promo_centavos ? p.preco_promo_centavos / 100 : null, promo_inicio: p.promo_inicio, promo_fim: p.promo_fim,
     promocao_vigente: promocaoVigente(p), imagens: JSON.parse(p.imagens), novidade: !!p.novidade, destaque: !!p.destaque, ativo: !!p.ativo, ordem: p.ordem };
 }
 

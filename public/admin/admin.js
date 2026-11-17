@@ -286,6 +286,9 @@
       preco: h("input", { type: "text", inputmode: "decimal", required: true, value: d.preco === "" ? "" : Number(d.preco).toFixed(2).replace(".", ","), placeholder: "79,90" }),
       estoque: h("input", { type: "number", min: "0", max: "9999", required: true, value: d.estoque }),
       peso: h("input", { type: "text", inputmode: "decimal", value: String(d.peso_kg).replace(".", ",") }),
+      alt: h("input", { type: "text", inputmode: "decimal", value: d.altura_cm ? String(d.altura_cm).replace(".", ",") : "", placeholder: "caixa padrão" }),
+      larg: h("input", { type: "text", inputmode: "decimal", value: d.largura_cm ? String(d.largura_cm).replace(".", ",") : "", placeholder: "caixa padrão" }),
+      comp: h("input", { type: "text", inputmode: "decimal", value: d.comprimento_cm ? String(d.comprimento_cm).replace(".", ",") : "", placeholder: "caixa padrão" }),
       promo: h("input", { type: "text", inputmode: "decimal", value: d.preco_promo ? Number(d.preco_promo).toFixed(2).replace(".", ",") : "", placeholder: "Opcional" }),
       promoIni: h("input", { type: "date", value: d.promo_inicio || "" }),
       promoFim: h("input", { type: "date", value: d.promo_fim || "" }),
@@ -316,6 +319,7 @@
       var corpo = {
         nome: f.nome.value, categoria: f.categoria.value || null, preco: lerReais(f.preco.value), estoque: Number(f.estoque.value),
         peso_kg: lerReais(f.peso.value || "0,42"), ordem: Number(f.ordem.value || 0), descricao: editor.obter(),
+        altura_cm: f.alt.value.trim() ? lerReais(f.alt.value) : null, largura_cm: f.larg.value.trim() ? lerReais(f.larg.value) : null, comprimento_cm: f.comp.value.trim() ? lerReais(f.comp.value) : null,
         preco_promo: f.promo.value.trim() ? lerReais(f.promo.value) : null, promo_inicio: f.promoIni.value || null, promo_fim: f.promoFim.value || null,
         ativo: f.ativo.checked, novidade: f.novidade.checked, destaque: f.destaque.checked, imagens: imagens
       };
@@ -328,6 +332,7 @@
       h("div", { class: "grade3" }, campo("Preço promocional (R$)", f.promo, "Vazio = sem promoção. A loja mostra o preço antigo riscado."),
         campo("Promoção começa", f.promoIni, "Opcional. Vazio = já valendo."), campo("Promoção termina", f.promoFim, "Último dia. Vazio = sem data para acabar.")),
       h("div", { class: "grade3" }, campo("Estoque", f.estoque), campo("Peso (kg)", f.peso, "Com a embalagem, para o frete."), campo("Posição na loja", f.ordem, "Menor número aparece primeiro.")),
+      h("div", { class: "grade3" }, campo("Altura (cm)", f.alt, "Produto embalado."), campo("Largura (cm)", f.larg), campo("Comprimento (cm)", f.comp, "As 3 medidas, ou deixe vazio para usar a caixa padrão.")),
       h("label", null, "Descrição"), editor.el,
       h("p", { class: "dica" }, "Selecione um trecho e use os botões para formatar. Cores disponíveis: as da marca. Fonte e tamanho seguem o padrão da loja."),
       h("label", null, "Fotos"), area,
@@ -543,6 +548,7 @@
     corpo.appendChild(h("p", null, c.nome, h("br"), c.email, h("br"), fmtTel(c.telefone) + " · ", h("a", { href: "https://wa.me/55" + c.telefone, target: "_blank", rel: "noopener" }, "abrir no WhatsApp"), h("br"), "CPF " + fmtCpf(c.cpf)));
     corpo.appendChild(h("h2", null, "Entrega"));
     corpo.appendChild(h("p", { class: "endereco" }, textoEnd));
+    if (p.entrega) corpo.appendChild(h("p", { class: "dica" }, "Forma de entrega escolhida: " + p.entrega + (p.prazo_transporte_dias !== null && p.prazo_transporte_dias !== undefined ? " (transporte: " + p.prazo_transporte_dias + " dia(s) útil(eis))" : "")));
     corpo.appendChild(h("div", { class: "barra" }, h("button", { class: "btn sec mini", type: "button", onclick: function () { copiar(textoEnd); } }, "Copiar endereço")));
 
     corpo.appendChild(h("h2", null, "Itens"));
@@ -706,7 +712,7 @@
   function abaTextos(main) {
     var c = S.config;
     var qs = c.quem_somos || { titulo: "", textos: [], imagem_id: null };
-    var estado = { logo_id: c.logo_id || null, quem_imagem: qs.imagem_id || null, depoimentos: (c.depoimentos || []).map(function (d) { return { nome: d.nome, texto: d.texto }; }) };
+    var estado = { regioes: (c.frete_regioes || []).map(function (r) { return { nome: r.nome, ufs: r.ufs.join(", "), preco: Number(r.preco).toFixed(2).replace(".", ","), prazo: r.prazo === null || r.prazo === undefined ? "" : String(r.prazo) }; }), logo_id: c.logo_id || null, quem_imagem: qs.imagem_id || null, depoimentos: (c.depoimentos || []).map(function (d) { return { nome: d.nome, texto: d.texto }; }) };
 
     var f = {
       loja: h("input", { type: "text", maxlength: "40", value: c.loja || "" }),
@@ -715,6 +721,10 @@
       instagram: h("input", { type: "text", maxlength: "30", value: c.instagram || "" }),
       email: h("input", { type: "text", maxlength: "120", value: c.email || "" }),
       dias: h("input", { type: "number", min: "0", max: "60", value: c.prazo_producao_dias_uteis }),
+      gratis: h("input", { type: "text", inputmode: "decimal", value: c.frete_gratis_acima ? Number(c.frete_gratis_acima).toFixed(2).replace(".", ",") : "", placeholder: "Vazio = não tem" }),
+      cxAlt: h("input", { type: "text", inputmode: "decimal", value: String((c.embalagem_padrao || {}).altura || 10).replace(".", ",") }),
+      cxLarg: h("input", { type: "text", inputmode: "decimal", value: String((c.embalagem_padrao || {}).largura || 12).replace(".", ",") }),
+      cxComp: h("input", { type: "text", inputmode: "decimal", value: String((c.embalagem_padrao || {}).comprimento || 16).replace(".", ",") }),
       frete: h("input", { type: "text", inputmode: "decimal", value: c.frete_provisorio ? Number(c.frete_provisorio).toFixed(2).replace(".", ",") : "0,00" }),
       aviso: h("textarea", { maxlength: "400" }),
       faixa: h("textarea", { maxlength: "520" }),
@@ -747,6 +757,19 @@
       return h("div", null, h("label", null, rotulo), area);
     }
 
+    var regBox = h("div");
+    function mostrarRegioes() {
+      limpar(regBox);
+      if (!estado.regioes.length) regBox.appendChild(h("p", { class: "dica" }, "Nenhuma região: o cliente paga o “frete único” abaixo."));
+      estado.regioes.forEach(function (r, i) {
+        function entrada(chave, rotulo, extra) { var el = h("input", Object.assign({ type: "text", value: r[chave], "aria-label": rotulo }, extra || {})); el.addEventListener("input", function () { r[chave] = el.value; }); return h("div", null, h("label", null, rotulo), el); }
+        regBox.appendChild(h("div", { class: "cartao" },
+          h("div", { class: "grade2" }, entrada("nome", "Nome da entrega", { maxlength: "40", placeholder: "Ex.: Grande Vitória" }), entrada("ufs", "Estados atendidos", { placeholder: "Ex.: ES, RJ, MG" })),
+          h("div", { class: "grade2" }, entrada("preco", "Preço (R$)", { inputmode: "decimal" }), entrada("prazo", "Transporte (dias úteis, opcional)", { inputmode: "numeric" })),
+          h("div", { class: "barra" }, h("button", { class: "btn perigo mini", type: "button", onclick: function () { estado.regioes.splice(i, 1); mostrarRegioes(); } }, "Remover região"))));
+      });
+    }
+    mostrarRegioes();
     var depBox = h("div");
     function mostrarDeps() {
       limpar(depBox);
@@ -771,6 +794,9 @@
       var corpo = {
         loja: f.loja.value, slogan: f.slogan.value, whatsapp: f.whatsapp.value, instagram: f.instagram.value, email: f.email.value,
         prazo_producao_dias_uteis: Number(f.dias.value), frete_provisorio: lerReais(f.frete.value || "0"), aviso_prazo: f.aviso.value,
+        frete_gratis_acima: f.gratis.value.trim() ? lerReais(f.gratis.value) : 0,
+        embalagem_padrao: { altura: lerReais(f.cxAlt.value), largura: lerReais(f.cxLarg.value), comprimento: lerReais(f.cxComp.value) },
+        frete_regioes: estado.regioes.filter(function (r) { return r.nome.trim() || r.ufs.trim(); }).map(function (r) { return { nome: r.nome, ufs: r.ufs.split(/[\s,;]+/).filter(Boolean), preco: lerReais(r.preco || "0"), prazo: String(r.prazo).trim() === "" ? null : Number(r.prazo) }; }),
         faixa_avisos: f.faixa.value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean),
         beneficios: ben.filter(function (b) { return b.titulo.value.trim(); }).map(function (b) { return { icone: b.icone.value, titulo: b.titulo.value, texto: b.texto.value }; }),
         quem_somos: { titulo: f.qsTitulo.value, textos: f.qsTextos.value.split(/\n\s*\n/).map(function (x) { return x.trim(); }).filter(Boolean), imagem_id: estado.quem_imagem },
@@ -785,8 +811,14 @@
       secao("Contato"),
       h("div", { class: "grade3" }, campo("WhatsApp", f.whatsapp, "Com 55 e DDD, só números."), campo("Instagram", f.instagram, "Só o usuário, sem @."), campo("E-mail", f.email)),
       secao("Prazo de entrega"),
-      h("div", { class: "grade2" }, campo("Dias úteis de produção", f.dias, "Usado na página Prazos e Envio."), campo("Frete provisório (R$)", f.frete, "Valor fixo cobrado em todo pedido até o cálculo por CEP (Fase 4). Cupom de frete grátis zera.")),
+      h("div", { class: "grade2" }, campo("Dias úteis de produção", f.dias, "Usado na página Prazos e Envio."), campo("Frete único (R$)", f.frete, "Usado só se não houver nenhuma região cadastrada. Cupom de frete grátis zera.")),
       campo("Aviso de prazo", f.aviso, "Aparece na vitrine, no produto e no carrinho."),
+      secao("Entrega e frete", "Por enquanto o frete é por região (valor fixo). O cálculo automático pelo Melhor Envio entra depois. O cliente informa o CEP e escolhe uma das opções do estado dele."),
+      (!estado.regioes.length && !Number(c.frete_provisorio) ? h("div", { class: "alerta" }, "⚠ Nenhum frete configurado: os pedidos sairão com frete R$ 0,00. Cadastre as regiões ou o frete único.") : null),
+      regBox,
+      h("button", { class: "btn sec mini", type: "button", onclick: function () { if (estado.regioes.length < 20) { estado.regioes.push({ nome: "", ufs: "", preco: "", prazo: "" }); mostrarRegioes(); } } }, "+ Adicionar região"),
+      h("div", { class: "grade2" }, campo("Frete grátis a partir de (R$)", f.gratis, "Pedidos com produtos a partir deste valor não pagam entrega."), h("div")),
+      h("div", { class: "grade3" }, campo("Caixa padrão: altura (cm)", f.cxAlt, "Usada nos produtos sem medidas próprias."), campo("Largura (cm)", f.cxLarg), campo("Comprimento (cm)", f.cxComp)),
       secao("Faixa de avisos do topo", "Uma frase por linha (até 5). Se houver mais de uma, elas se alternam."),
       f.faixa,
       secao("Benefícios", "Os ícones abaixo da primeira imagem (até 4). Deixe o título vazio para esconder."),
