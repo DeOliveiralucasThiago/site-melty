@@ -192,7 +192,7 @@
   }
 
   /* ---------- estrutura geral ---------- */
-  var ABAS = [["pedidos", "Pedidos"], ["produtos", "Produtos"], ["categorias", "Categorias"], ["banners", "Banners"], ["cupons", "Cupons"], ["textos", "Textos e contato"]];
+  var ABAS = [["pedidos", "Pedidos"], ["produtos", "Produtos"], ["categorias", "Categorias"], ["banners", "Banners"], ["cupons", "Cupons"], ["textos", "Textos e contato"], ["paginas", "Páginas"]];
 
   function carregarTudo() {
     return Promise.all([api("GET", "/produtos"), api("GET", "/categorias"), api("GET", "/banners"), api("GET", "/config"), api("GET", "/cupons"), api("GET", "/pedidos")]).then(function (v) {
@@ -215,7 +215,7 @@
       return h("button", { role: "tab", "aria-selected": abaAtual === a[0] ? "true" : "false", onclick: function () { abaAtual = a[0]; desenhar(); } }, a[1], novos ? h("span", { class: "etq" }, String(novos)) : null);
     })));
     raiz.appendChild(main);
-    ({ pedidos: abaPedidos, produtos: abaProdutos, categorias: abaCategorias, banners: abaBanners, cupons: abaCupons, textos: abaTextos })[abaAtual](main);
+    ({ pedidos: abaPedidos, produtos: abaProdutos, categorias: abaCategorias, banners: abaBanners, cupons: abaCupons, textos: abaTextos, paginas: abaPaginas })[abaAtual](main);
   }
   function recarregar() { return carregarTudo().then(desenhar); }
 
@@ -704,6 +704,45 @@
             acao(api("DELETE", "/cupons/" + c.id), "Cupom excluído.").then(function () { dlg.close(); return recarregar(); }).catch(function () {});
           } }, "Excluir")));
     });
+  }
+
+
+  /* ========== PÁGINAS ========== */
+  function abaPaginas(main) {
+    var lista = h("div");
+    main.appendChild(h("h1", null, "Páginas"));
+    main.appendChild(h("p", { class: "dica" }, "Textos fixos da loja. No texto, você pode usar {{email}}, {{whatsapp}}, {{loja}}, {{prazo_producao}} e {{aviso_prazo}}: eles são trocados pelos dados atuais da loja, então não precisam ser reescritos se algo mudar. Os textos são um ponto de partida e devem ser revisados por um contador ou advogado antes de a loja abrir."));
+    main.appendChild(lista);
+    lista.appendChild(h("p", { class: "dica" }, "Carregando…"));
+    api("GET", "/paginas").then(function (ps) {
+      limpar(lista);
+      ps.forEach(function (p) {
+        lista.appendChild(h("div", { class: "cartao" }, h("div", { class: "linha pedido" }, h("div", { class: "miniatura sigla" }, "¶"),
+          h("div", null, h("div", { class: "nome" }, p.titulo, p.publicada ? null : h("span", { class: "etq cinza" }, "Oculta")), h("div", { class: "meta" }, "Atualizada em " + dataHora(p.atualizado_em))),
+          h("div", { class: "acoes extra" },
+            h("a", { class: "btn sec mini", href: "/" + (p.slug === "prazos-e-envio" ? "prazos" : p.slug) + ".html", target: "_blank", rel: "noopener" }, "Ver"),
+            h("button", { class: "btn mini", onclick: function () { editarPagina(p.slug); } }, "Editar")))));
+      });
+    }).catch(function (e) { limpar(lista); if (e.message !== "sessão") lista.appendChild(h("p", { class: "erro" }, e.message)); });
+  }
+
+  function editarPagina(slug) {
+    api("GET", "/paginas/" + encodeURIComponent(slug)).then(function (p) {
+      var titulo = h("input", { type: "text", maxlength: "80", value: p.titulo });
+      var publicada = h("input", { type: "checkbox", checked: p.publicada });
+      var ed = editorTexto(p.conteudo);
+      dialogo(function (dlg) {
+        return h("form", { method: "dialog", onsubmit: function (ev) {
+          ev.preventDefault();
+          acao(api("PUT", "/paginas/" + encodeURIComponent(slug), { titulo: titulo.value, conteudo: ed.obter(), publicada: publicada.checked }), "Página salva.")
+            .then(function () { dlg.close(); return recarregar(); }).catch(function () {});
+        } },
+          h("h2", null, "Editar página"), h("label", null, "Título"), titulo, h("label", null, "Texto"), ed.el,
+          h("p", { class: "dica" }, "Use “Subtítulo” para separar as seções. Dados da loja: {{email}}, {{whatsapp}}, {{loja}}, {{prazo_producao}}, {{aviso_prazo}}."),
+          h("label", { class: "chk" }, publicada, "Página visível na loja"),
+          h("div", { class: "barra" }, h("button", { class: "btn", type: "submit" }, "Salvar"), h("button", { class: "btn sec", type: "button", onclick: function () { dlg.close(); } }, "Cancelar")));
+      });
+    }).catch(function (e) { if (e.message !== "sessão") aviso(e.message, "erro"); });
   }
 
   /* ========== TEXTOS E CONTATO ========== */

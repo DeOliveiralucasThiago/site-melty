@@ -8,6 +8,7 @@ const cfg = lerJson("config.json");
 const produtos = lerJson("produtos.json");
 const categorias = lerJson("categorias.json");
 const banners = lerJson("banners.json");
+const paginas = lerJson("paginas.json");
 
 const BANNER_ID = "a1b2c3d4e5f60718293a4b5c";
 const bannerB64 = readFileSync(new URL("../seed/banner-1.webp", import.meta.url)).toString("base64");
@@ -25,6 +26,8 @@ for (let i = 0; i < bannerB64.length; i += PEDACO)
   sql.push(`UPDATE imagens SET dados = dados || ${q(bannerB64.slice(i, i + PEDACO))} WHERE id = ${q(BANNER_ID)};`);
 banners.forEach((b, i) =>
   sql.push(`INSERT INTO banners (imagem_id, alt, titulo, botao, link, ordem) VALUES (${q(BANNER_ID)}, ${q(b.alt || "")}, ${q(b.titulo || "")}, ${q(b.botao || "")}, ${q(b.link || "")}, ${i});`));
+
+paginas.forEach((p) => sql.push(`INSERT INTO paginas (slug, titulo, conteudo) VALUES (${q(p.slug)}, ${q(p.titulo)}, ${q(p.conteudo)});`));
 
 const config = {
   loja: cfg.loja, slogan: cfg.slogan, whatsapp: cfg.whatsapp, instagram: cfg.instagram, email: cfg.email,

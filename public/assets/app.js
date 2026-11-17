@@ -81,7 +81,7 @@
     document.getElementById("rodape").innerHTML =
       '<div class="wrap"><div class="cols">' +
       "<div><h4>" + esc(c.loja) + "</h4><p>" + esc(c.slogan) + ".</p></div>" +
-      '<div><h4>Institucional</h4><a href="index.html#quem-somos">Quem somos</a><a href="prazos.html">Prazos e Envio</a><a href="politica-de-privacidade.html">Política de Privacidade</a></div>' +
+      '<div><h4>Institucional</h4><a href="index.html#quem-somos">Quem somos</a><a href="prazos.html">Prazos e Envio</a><a href="trocas-e-devolucoes.html">Trocas e Devoluções</a><a href="politica-de-privacidade.html">Política de Privacidade</a></div>' +
       '<div><h4>Atendimento</h4><a href="https://wa.me/' + esc(c.whatsapp) + '" rel="noopener">WhatsApp</a>' +
       '<a href="https://instagram.com/' + esc(c.instagram) + '" rel="noopener">Instagram @' + esc(c.instagram) + "</a>" +
       '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + "</a></div></div>" +
@@ -537,35 +537,23 @@
     });
   }
 
-  /* ---------- política de privacidade ---------- */
-  function paginaPrivacidade(d) {
-    var c = d.config;
-    document.getElementById("app").innerHTML = '<div class="wrap page"><h1>Política de Privacidade</h1>' +
-      '<p class="muted small">Última atualização: ' + new Date().getFullYear() + ". Texto-base, sujeito a revisão.</p>" +
-      "<h2>Quais dados coletamos</h2><p>Para vender e entregar suas velas, pedimos: nome, e-mail, telefone, CPF e endereço de entrega. O pagamento é processado por um provedor de pagamento (você é levado à página dele); nós não vemos nem guardamos dados do seu cartão.</p>" +
-      "<h2>Para que usamos</h2><p>Processar e entregar o pedido, avisar você sobre o andamento, emitir o pagamento, controlar o uso de cupons de desconto e cumprir obrigações legais e fiscais.</p>" +
-      "<h2>CPF e cupons</h2><p>Os cupons são vinculados ao CPF para evitar uso repetido. Para isso, guardamos uma versão embaralhada do CPF (que não permite descobrir o número original) e, no pedido, o CPF completo, que só a loja acessa.</p>" +
-      "<h2>Com quem compartilhamos</h2><p>Apenas com quem é necessário para a compra: o provedor de pagamento e a transportadora (nome, endereço e telefone para a entrega). Não vendemos seus dados.</p>" +
-      "<h2>Por quanto tempo guardamos</h2><p>Pelo tempo necessário para a entrega, garantia e obrigações legais. Depois disso, os dados são apagados ou anonimizados.</p>" +
-      "<h2>Seus direitos</h2><p>Você pode pedir a confirmação do tratamento, acesso, correção, anonimização ou exclusão dos seus dados, entre outros direitos da LGPD (Lei 13.709/2018). Escreva para <a href=\"mailto:" + esc(c.email) + "\">" + esc(c.email) + "</a>.</p>" +
-      "<h2>Cookies e armazenamento local</h2><p>Guardamos no seu navegador apenas o conteúdo do carrinho e o último pedido, para a loja funcionar. Não usamos cookies de publicidade.</p></div>";
-  }
-
-  /* ---------- prazos ---------- */
-  function paginaPrazos(d) {
-    document.getElementById("app").innerHTML =
-      '<div class="wrap page"><h1>Prazos e Envio</h1>' + avisoPrazo(d.config) +
-      "<h2>Produção</h2><p>Cada vela é preparada após a confirmação do pagamento, em até <strong>" +
-      esc(d.config.prazo_producao_dias_uteis) + " dias úteis</strong>.</p>" +
-      "<h2>Transporte</h2><p>O prazo de transporte é estimado conforme o seu CEP e a modalidade escolhida, contado em dias úteis a partir da postagem.</p>" +
-      "<h2>Imprevistos</h2><p>Greves, feriados, clima ou áreas de difícil acesso podem afetar a entrega. Nesses casos, acompanhamos o rastreio e ajudamos você a resolver.</p>" +
-      "<h2>Rastreamento</h2><p>Enviamos o código de rastreio assim que o pedido for postado.</p>" +
-      "<h2>Embalagem</h2><p>As velas seguem em embalagem reforçada. Em dias muito quentes, mantenha a vela em local fresco após o recebimento.</p>" +
-      '<h2>Dúvidas?</h2><p><a href="https://wa.me/' + esc(d.config.whatsapp) + '" rel="noopener">Fale com a gente pelo WhatsApp</a>.</p></div>';
+  /* ---------- páginas de texto (editáveis pelo painel) ---------- */
+  function paginaTexto(d) {
+    var slug = document.body.getAttribute("data-slug") || "";
+    var app = document.getElementById("app");
+    fetch("/api/paginas/" + encodeURIComponent(slug)).then(function (r) {
+      if (!r.ok) throw new Error("nao_encontrada");
+      return r.json();
+    }).then(function (p) {
+      document.title = p.titulo + " | " + d.config.loja;
+      app.innerHTML = '<div class="wrap page"><h1>' + esc(p.titulo) + '</h1><div class="desc">' + p.conteudo + "</div></div>";   // conteúdo já limpo pelo servidor
+    }).catch(function () {
+      app.innerHTML = '<div class="wrap page"><h1>Página não encontrada</h1><p><a href="index.html">Voltar para a loja</a></p></div>';
+    });
   }
 
   /* ---------- início ---------- */
-  var paginas = { home: paginaHome, catalogo: paginaCatalogo, produto: paginaProduto, carrinho: paginaCarrinho, prazos: paginaPrazos, checkout: paginaCheckout, pedido: paginaPedido, teste: paginaTeste, privacidade: paginaPrivacidade };
+  var paginas = { home: paginaHome, catalogo: paginaCatalogo, produto: paginaProduto, carrinho: paginaCarrinho, texto: paginaTexto, checkout: paginaCheckout, pedido: paginaPedido, teste: paginaTeste };
   carregar().then(function (d) {
     montarLayout(d);
     var tipo = document.body.getAttribute("data-page");
