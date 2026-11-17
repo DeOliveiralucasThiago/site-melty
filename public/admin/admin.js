@@ -509,6 +509,12 @@
     main.appendChild(h("p", { class: "dica" }, "Pedidos “Pago” são os que você precisa produzir e enviar. Pedidos marcados “Conferir” têm um alerta (por exemplo, CPF de quem pagou diferente do informado)."));
     main.appendChild(h("div", { class: "barra" }, h("div", { class: "espaco" }, filtro), h("button", { class: "btn sec", onclick: carregar }, "Atualizar")));
     main.appendChild(lista);
+    main.appendChild(h("h2", null, "Planilha e cópia de segurança"));
+    main.appendChild(h("p", { class: "dica" }, "Os dados da loja ficam guardados no Cloudflare. Baixe uma cópia de vez em quando (uma vez por semana é um bom hábito) e guarde em local seguro: os arquivos contêm dados de clientes."));
+    main.appendChild(h("div", { class: "barra" },
+      h("a", { class: "btn sec", href: "/api/admin/pedidos/exportar", download: "" }, "Baixar pedidos (planilha)"),
+      h("a", { class: "btn sec", href: "/api/admin/backup", download: "" }, "Cópia de segurança (sem imagens)"),
+      h("a", { class: "btn sec", href: "/api/admin/backup?imagens=1", download: "" }, "Cópia completa (com imagens)")));
     carregar();
   }
 
