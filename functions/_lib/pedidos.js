@@ -65,7 +65,7 @@ export async function criarPedido(env, corpo, { urlBase }) {
 
   const calc = await calcularPedido(db, env, { itens: corpo.itens, cupom: cliente.cupom, cpf: cliente.cpf });
   const cot = await cotarFrete(db, env, { cep: cliente.cep, linhas: calc.itens, subtotal_centavos: calc.subtotal_centavos });
-  if (!cot.opcoes.length) throw new ErroNegocio("Ainda não entregamos neste CEP. Fale com a gente pelo WhatsApp.", "frete");
+  if (!cot.opcoes.length) throw new ErroNegocio(cot.cotacao_falhou ? "Não foi possível calcular o frete agora. Tente de novo em instantes ou fale com a gente pelo WhatsApp." : "Ainda não entregamos neste CEP. Fale com a gente pelo WhatsApp.", "frete");
   const opcao = cliente.frete_id ? cot.opcoes.find((o) => o.id === cliente.frete_id) : (cot.opcoes.length === 1 ? cot.opcoes[0] : null);
   if (!opcao) throw new ErroNegocio("Escolha uma forma de entrega.", "frete");
   if (!opcao.retirada) {
@@ -88,7 +88,7 @@ export async function criarPedido(env, corpo, { urlBase }) {
           token, status: "aguardando_pagamento", cliente_nome: cliente.nome, cliente_email: cliente.email, cliente_telefone: cliente.telefone, cliente_cpf: cliente.cpf,
           end_cep: cliente.cep, end_rua: cliente.rua, end_numero: cliente.numero, end_complemento: cliente.complemento, end_bairro: cliente.bairro, end_cidade: cliente.cidade, end_uf: cliente.uf,
           subtotal_centavos: calc.subtotal_centavos, desconto_centavos: calc.desconto_centavos, frete_centavos: frete, total_centavos: total, cupom_codigo: calc.cupom?.codigo ?? "",
-          provedor: prov.nome, expira_em: expira, url_base: urlBase, frete_servico: opcao.servico, frete_id: opcao.id, frete_prazo_dias: opcao.prazo_dias_uteis ?? null, retirada: opcao.retirada ? 1 : 0,
+          provedor: prov.nome, expira_em: expira, url_base: urlBase, frete_servico: opcao.servico, frete_id: opcao.id, frete_prazo_dias: opcao.prazo_dias_uteis ?? null, retirada: opcao.retirada ? 1 : 0, pacote_json: opcao.retirada ? null : JSON.stringify(cot.pacote),
         };
         const nomes = Object.keys(col);
         return db.prepare(`INSERT INTO pedidos (${nomes.join(", ")}) VALUES (${nomes.map(() => "?").join(", ")})`).bind(...Object.values(col));
@@ -213,7 +213,7 @@ export async function mudarStatus(db, id, novo, { rastreio = "", env } = {}) {
     return;
   }
   if (novo === "enviado") {
-    const cod = String(rastreio).trim().toUpperCase();
+    const cod = String(rastreio || p.me_rastreio || "").trim().toUpperCase();
     if (!/^[A-Z0-9]{8,30}$/.test(cod)) throw new ErroNegocio("Informe o código de rastreio (8 a 30 letras e números, sem espaços).", "rastreio");
     await db.prepare("UPDATE pedidos SET status = 'enviado', rastreio = ?, enviado_em = datetime('now'), atualizado_em = datetime('now') WHERE id = ?").bind(cod, id).run();
     await evento(db, id, "enviado", cod);

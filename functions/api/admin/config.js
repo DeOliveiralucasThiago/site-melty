@@ -45,6 +45,24 @@ const VALIDADORES = {
     for (const e of emails) if (e.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new Error(`Avisos para a loja: o e-mail “${e}” é inválido.`);
     return { emails, ao_criar: !!x?.ao_criar, ao_pagar: x?.ao_pagar === undefined ? true : !!x.ao_pagar };
   },
+  melhorenvio: (x) => {
+    const servicos = [...new Set((Array.isArray(x?.servicos) ? x.servicos : []).map(Number))];
+    if (servicos.some((n) => !Number.isInteger(n) || n < 1 || n > 999) || servicos.length > 12) throw new Error("Melhor Envio: serviços inválidos.");
+    return { ativo: !!x?.ativo, servicos: servicos.length ? servicos : [1, 2], etiquetas_ativas: !!x?.etiquetas_ativas, nao_comercial: x?.nao_comercial === undefined ? true : !!x.nao_comercial };
+  },
+  remetente: (x) => {
+    const dig = (t) => String(t ?? "").replace(/\D/g, "");
+    const cep = dig(x?.cep), doc = dig(x?.documento), tel = dig(x?.telefone);
+    if (cep && cep.length !== 8) throw new Error("Remetente: CEP deve ter 8 números.");
+    if (doc && ![11, 14].includes(doc.length)) throw new Error("Remetente: informe o CPF (11 números) ou o CNPJ (14 números).");
+    if (tel && (tel.length < 10 || tel.length > 11)) throw new Error("Remetente: telefone com DDD (10 ou 11 números).");
+    const uf = String(x?.uf ?? "").trim().toUpperCase();
+    if (uf && !UFS.includes(uf)) throw new Error("Remetente: estado (UF) inválido.");
+    const email = v.texto(x?.email, "E-mail do remetente", { max: 120 }).toLowerCase();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Remetente: e-mail inválido.");
+    return { nome: v.texto(x?.nome, "Nome do remetente", { max: 80 }), telefone: tel, email, documento: doc, cep, rua: v.texto(x?.rua, "Rua do remetente", { max: 100 }), numero: v.texto(x?.numero, "Número do remetente", { max: 10 }),
+      complemento: v.texto(x?.complemento, "Complemento do remetente", { max: 40 }), bairro: v.texto(x?.bairro, "Bairro do remetente", { max: 60 }), cidade: v.texto(x?.cidade, "Cidade do remetente", { max: 60 }), uf, observacao: v.texto(x?.observacao, "Observação", { max: 80 }) };
+  },
   frete_gratis_acima: (x) => v.decimal(x ?? 0, "Frete grátis a partir de", 0, 100000),
   embalagem_padrao: (x) => ({ altura: v.decimal(x?.altura, "Altura da caixa padrão", 1, 105), largura: v.decimal(x?.largura, "Largura da caixa padrão", 1, 105), comprimento: v.decimal(x?.comprimento, "Comprimento da caixa padrão", 1, 105) }),
   frete_provisorio: (x) => v.decimal(x ?? 0, "Frete provisório", 0, 500),

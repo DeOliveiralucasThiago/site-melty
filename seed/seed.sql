@@ -46,6 +46,8 @@ INSERT INTO config (chave, valor) VALUES ('prazo_producao_dias_uteis', '3');
 INSERT INTO config (chave, valor) VALUES ('prazo_postagem_dias_uteis', '2');
 INSERT INTO config (chave, valor) VALUES ('retirada', '{"ativa":false,"nome":"Retirada no local","endereco":"","instrucoes":"","ceps":[]}');
 INSERT INTO config (chave, valor) VALUES ('aviso_loja', '{"emails":["meltyvelas@gmail.com"],"ao_criar":false,"ao_pagar":true}');
+INSERT INTO config (chave, valor) VALUES ('melhorenvio', '{"ativo":false,"servicos":[1,2],"etiquetas_ativas":false,"nao_comercial":true}');
+INSERT INTO config (chave, valor) VALUES ('remetente', '{"nome":"","telefone":"","email":"","documento":"","cep":"","rua":"","numero":"","complemento":"","bairro":"","cidade":"","uf":"","observacao":""}');
 INSERT INTO config (chave, valor) VALUES ('aviso_prazo', '"O prazo é estimado e começa a contar após a postagem do pedido. Pode variar conforme a região e imprevistos dos Correios."');
 INSERT INTO config (chave, valor) VALUES ('faixa_avisos', '["Velas aromáticas artesanais, feitas com carinho","Frete calculado pelo seu CEP"]');
 INSERT INTO config (chave, valor) VALUES ('beneficios', '[{"icone":"mao","titulo":"Feito à mão","texto":"Cada vela é preparada com cuidado"},{"icone":"cartao","titulo":"Pix e cartão","texto":"Pagamento online seguro"},{"icone":"caixa","titulo":"Envio para todo o Brasil","texto":"Frete calculado pelo seu CEP"},{"icone":"zap","titulo":"Ficou em dúvida?","texto":"Chama no WhatsApp"}]');

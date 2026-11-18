@@ -55,5 +55,28 @@
     ],
     "ao_criar": false,
     "ao_pagar": true
+  },
+  "melhorenvio": {
+    "ativo": false,
+    "servicos": [
+      1,
+      2
+    ],
+    "etiquetas_ativas": false,
+    "nao_comercial": true
+  },
+  "remetente": {
+    "nome": "",
+    "telefone": "",
+    "email": "",
+    "documento": "",
+    "cep": "",
+    "rua": "",
+    "numero": "",
+    "complemento": "",
+    "bairro": "",
+    "cidade": "",
+    "uf": "",
+    "observacao": ""
   }
 }

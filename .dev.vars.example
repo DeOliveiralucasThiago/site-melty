@@ -8,3 +8,6 @@ EMAIL_PROVEDOR=teste
 # RESEND_API_KEY=re_...
 # EMAIL_REMETENTE=Melty <pedidos@mail.seudominio.com.br>
 # SITE_URL=https://www.seudominio.com.br
+# Melhor Envio: token gerado no painel do Melhor Envio (nunca no código). Ambiente: sandbox (testes, padrão) ou producao.
+# MELHORENVIO_TOKEN=...
+# MELHORENVIO_AMBIENTE=sandbox

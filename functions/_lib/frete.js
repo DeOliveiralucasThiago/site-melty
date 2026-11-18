@@ -1,3 +1,5 @@
+import { cotarMelhorEnvio, meDisponivel, userAgent } from "./melhorenvio.js";
+
 // Cotação de frete. O servidor calcula o pacote a partir dos produtos do banco e cota por CEP; o navegador só escolhe uma opção.
 //
 // Provedores de cotação (hoje: "tabela", por região, configurada no painel).
@@ -52,7 +54,7 @@ const slug = (t) => String(t).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
  * Com o Melhor Envio, "transporte_dias" será o prazo devolvido por eles e a margem é somada da mesma forma.
  */
 export async function cotarFrete(db, env, { cep, linhas, subtotal_centavos }) {
-  const c = await cfg(db, ["frete_regioes", "frete_provisorio", "frete_gratis_acima", "embalagem_padrao", "prazo_producao_dias_uteis", "retirada"]);
+  const c = await cfg(db, ["frete_regioes", "frete_provisorio", "frete_gratis_acima", "embalagem_padrao", "prazo_producao_dias_uteis", "retirada", "melhorenvio", "remetente", "loja", "email"]);
   const uf = ufDoCep(cep);
   const pacote = montarPacote(linhas, { ...EMBALAGEM_PADRAO, ...(c.embalagem_padrao || {}) });
   const gratisAcima = Math.round(Number(c.frete_gratis_acima || 0) * 100);
@@ -60,14 +62,28 @@ export async function cotarFrete(db, env, { cep, linhas, subtotal_centavos }) {
   const regioes = Array.isArray(c.frete_regioes) ? c.frete_regioes : [];
   const preparo = Math.max(0, Number(c.prazo_producao_dias_uteis) || 0);
 
+  // Melhor Envio (quando ligado, com token e CEP de origem): cota o pacote real. Se falhar, usa a tabela por região, se houver.
+  const me = c.melhorenvio;
+  const cepOrigem = String(c.remetente?.cep ?? "").replace(/\D/g, "");
+  const meAtivo = !!(me && me.ativo && meDisponivel(env) && cepOrigem.length === 8);
+  let opcoesME = null, cotacaoFalhou = false;
+  if (meAtivo && uf) {
+    try {
+      const lista = await cotarMelhorEnvio(env, db, { contato: userAgent(c.loja, c.email), cepOrigem, cepDestino: cep, pacote, valorCentavos: subtotal_centavos, servicos: me.servicos });
+      opcoesME = lista.map((o) => ({ ...o, prazo_dias_uteis: o.transporte_dias === null ? null : o.transporte_dias + preparo }));
+    } catch (e) { console.error("Melhor Envio (cotação):", e.message); cotacaoFalhou = true; }
+  }
+
   let opcoes;
-  if (regioes.length) {
+  if (opcoesME && opcoesME.length) {
+    opcoes = opcoesME;
+  } else if (regioes.length) {
     opcoes = regioes.filter((r) => uf && r.ufs.includes(uf)).map((r) => ({
       id: "regiao:" + slug(r.nome), servico: r.nome, transportadora: "", preco_centavos: Math.round(Number(r.preco) * 100),
       transporte_dias: r.prazo ?? null, prazo_dias_uteis: r.prazo === null || r.prazo === undefined ? null : r.prazo + preparo,
     }));
-  } else if (Number(c.frete_provisorio) > 0 || !(c.retirada && c.retirada.ativa)) {
-    // Nenhuma região configurada: um valor único provisório (some se só existir retirada)
+  } else if (Number(c.frete_provisorio) > 0 || !((c.retirada && c.retirada.ativa) || meAtivo)) {
+    // Nenhuma região configurada: um valor único provisório (some se só existir retirada ou Melhor Envio)
     opcoes = [{ id: "unico", servico: "Entrega", transportadora: "", preco_centavos: Math.round(Number(c.frete_provisorio || 0) * 100), transporte_dias: null, prazo_dias_uteis: null }];
   } else {
     opcoes = [];
@@ -82,5 +98,5 @@ export async function cotarFrete(db, env, { cep, linhas, subtotal_centavos }) {
     if (!prefixos.length || prefixos.some((p) => d.startsWith(p)))
       opcoes.push({ id: "retirada", servico: ret.nome || "Retirada no local", transportadora: "", preco_centavos: 0, transporte_dias: null, prazo_dias_uteis: null, gratis: false, retirada: true, endereco: ret.endereco, instrucoes: ret.instrucoes || "" });
   }
-  return { uf, preparo_dias: preparo, pacote, opcoes };
+  return { uf, preparo_dias: preparo, pacote, opcoes, fonte: opcoesME && opcoesME.length ? "melhorenvio" : "tabela", cotacao_falhou: cotacaoFalhou && !opcoes.some((o) => !o.retirada) };
 }

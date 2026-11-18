@@ -13,7 +13,7 @@ export async function onRequestPost({ request, env }) {
     const c = await calcularPedido(env.DB, env, { itens: corpo.itens });
     const q = await cotarFrete(env.DB, env, { cep, linhas: c.itens, subtotal_centavos: c.subtotal_centavos });
     return json({
-      uf: q.uf,
+      uf: q.uf, aviso: q.cotacao_falhou ? "Não foi possível calcular o frete agora. Tente de novo em instantes." : "",
       opcoes: q.opcoes.map((o) => ({ id: o.id, servico: o.servico, transportadora: o.transportadora, preco: o.preco_centavos / 100, prazo_dias_uteis: o.prazo_dias_uteis, gratis: o.gratis,
         ...(o.retirada ? { retirada: true, endereco: o.endereco, instrucoes: o.instrucoes } : {}) })),
     });

@@ -433,6 +433,7 @@
       enviarJson("/api/frete/cotar", { itens: itens, cep: cepD }).then(function (r) {
         if (!r.ok) { $("entrega").innerHTML = '<p class="erro">' + esc(r.dados.erro || "Não foi possível calcular a entrega.") + "</p>"; return; }
         estado.opcoes = r.dados.opcoes;
+        if (r.dados.aviso && !estado.opcoes.length) { $("entrega").innerHTML = '<p class="erro">' + esc(r.dados.aviso) + ' <a href="https://wa.me/' + esc(d.config.whatsapp) + '" rel="noopener">Fale com a gente pelo WhatsApp</a>.</p>'; return; }
         if (r.dados.uf) $("uf").value = r.dados.uf;
         if (estado.opcoes.length === 1) estado.frete_id = estado.opcoes[0].id;
         desenharOpcoes(); atualizarResumo();

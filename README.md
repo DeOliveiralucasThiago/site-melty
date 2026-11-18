@@ -36,6 +36,20 @@ Fluxo: carrinho → `checkout.html` (dados, endereço, cupom) → `POST /api/ped
   O estado vem do CEP (faixas em `functions/_lib/frete.js`, conferir antes de publicar). O prazo mostrado ao cliente é **único**: transporte + uma margem de dias (configurável, somada pelo sistema), **contado a partir do envio** (postagem). Não se fala em "produção" nem em prazo desde o pagamento para o cliente.
   O **Melhor Envio** entra no mesmo encaixe (`cotarFrete`), devolvendo opções no mesmo formato. Falta o token e conferir a documentação.
 
+## Melhor Envio (frete e etiquetas)
+Ligar em Painel > Textos e contato > "Melhor Envio" e preencher o **remetente** (o CEP de origem é usado na cotação; o resto, nas etiquetas). Variáveis (segredos no Cloudflare):
+`MELHORENVIO_TOKEN` (token gerado no painel do Melhor Envio) e `MELHORENVIO_AMBIENTE` (`sandbox` = testes, padrão; `producao` = valendo). O botão **"Testar conexão"**
+faz uma cotação de teste (não gasta nada) e mostra os serviços/preços ou o motivo do erro (ex.: token vencido).
+- **Cotação:** o pacote real (peso e medidas do carrinho) é cotado como um só volume; usa `custom_price` e `custom_delivery_time` (conforme a documentação). O prazo mostrado
+  = transporte + margem configurada, contado após o envio. Cotações ficam 10 min em cache (preço mostrado = preço cobrado). Se o Melhor Envio falhar, usa a tabela por região
+  (se houver); sem tabela, o cliente é avisado e **nunca** recebe "frete grátis" por engano.
+- **Etiquetas:** no detalhe do pedido pago (entrega Melhor Envio): "Gerar etiqueta" faz carrinho → **compra (debita o saldo da carteira)** → geração → rastreio; guarda o andamento, não
+  compra duas vezes (trava contra clique duplo) e, se faltar saldo, continua de onde parou. Há "Imprimir" (link privado), "Buscar rastreio" e "Cancelar etiqueta" (estorno em até 12 h,
+  segundo a documentação). Ao marcar como enviado, o rastreio da etiqueta vai no e-mail. A geração só funciona com "Permitir gerar etiquetas" ligado.
+- **Status da validação:** escrito conforme a documentação oficial e testado com um servidor simulado; **ainda não validado no sandbox do Melhor Envio com token real**. Pontos a conferir
+  lá: como pessoa física informa documento (`document` x `company_document`), `non_commercial`, e o formato da URL de impressão. O token do painel pode vencer: se aparecer
+  "token recusado", gere outro.
+
 ## Retirada no local e avisos para a loja
 - **Retirada:** Painel > Textos e contato > "Retirada no local" (ligar, endereço, instruções, e CEPs que podem retirar, se quiser limitar). No fechamento aparece como uma opção
   grátis; ao escolher, o cliente **não informa endereço**. Etapas: pago → em preparo → **pronto para retirada** (o painel envia o e-mail "sua encomenda está pronta para retirada

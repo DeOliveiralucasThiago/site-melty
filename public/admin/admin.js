@@ -538,7 +538,7 @@
     var textoEnd = p.retirada ? c.nome + "\nRETIRADA NO LOCAL\nTel. " + fmtTel(c.telefone)
       : c.nome + "\n" + e.rua + ", " + e.numero + (e.complemento ? " - " + e.complemento : "") + "\n" + e.bairro + " - " + e.cidade + "/" + e.uf + "\nCEP " + e.cep.replace(/^(\d{5})(\d{3})$/, "$1-$2") + "\nTel. " + fmtTel(c.telefone);
     var link = location.origin + "/pedido.html?t=" + p.token;
-    var rastreio = h("input", { type: "text", maxlength: "30", placeholder: "Código de rastreio (ex.: AB123456789BR)", value: p.rastreio || "", "aria-label": "Código de rastreio" });
+    var rastreio = h("input", { type: "text", maxlength: "30", placeholder: "Código de rastreio (ex.: AB123456789BR)", value: p.rastreio || (p.etiqueta && p.etiqueta.rastreio) || "", "aria-label": "Código de rastreio" });
     var proximos = proximosDe(p);
 
     function mudar(novo) {
@@ -563,6 +563,32 @@
     if (p.entrega) corpo.appendChild(h("p", { class: "dica" }, "Forma de entrega escolhida: " + p.entrega + (p.retirada ? " (o cliente vem buscar; sem endereço de entrega)" : "") + (p.prazo_dias !== null && p.prazo_dias !== undefined ? " (previsão: " + p.prazo_dias + " dias úteis)" : "")));
     corpo.appendChild(h("div", { class: "barra" }, h("button", { class: "btn sec mini", type: "button", onclick: function () { copiar(textoEnd); } }, p.retirada ? "Copiar dados do cliente" : "Copiar endereço")));
 
+    if (p.etiqueta && p.etiqueta.elegivel && ["pago", "em_producao", "enviado"].indexOf(p.status) >= 0) {
+      var et = p.etiqueta;
+      var ESTADO_ET = { "": "Etiqueta ainda não gerada.", carrinho: "Etiqueta criada, mas o frete ainda não foi pago (confira o saldo do Melhor Envio).", paga: "Frete pago, falta gerar a etiqueta.", gerada: "Etiqueta gerada." };
+      function chamarEtiqueta(acao, msgOk, depois) {
+        return acao_(api("POST", "/pedidos/" + p.id + "/etiqueta", { acao: acao }), msgOk).then(function (r) { depois && depois(r); return api("GET", "/pedidos/" + p.id); })
+          .then(function (n) { desenharDetalhe(n, corpo, fechar, dlg); }).catch(function (e) { if (e.message !== "sessão") api("GET", "/pedidos/" + p.id).then(function (n) { desenharDetalhe(n, corpo, fechar, dlg); }).catch(function () {}); });
+      }
+      function acao_(promessa, ok) { return acao(promessa, ok); }
+      corpo.appendChild(h("h2", null, "Etiqueta (Melhor Envio)"));
+      corpo.appendChild(h("p", { class: "dica" }, ESTADO_ET[et.estado] || et.estado + (et.rastreio ? " Rastreio: " + et.rastreio : "")));
+      if (et.rastreio) corpo.appendChild(h("p", null, "Código de rastreio: ", h("b", null, et.rastreio)));
+      if (et.erro) corpo.appendChild(h("div", { class: "alerta" }, "⚠ " + et.erro));
+      corpo.appendChild(h("div", { class: "barra" },
+        p.status !== "enviado" && et.estado !== "gerada" ? h("button", { class: "btn mini", type: "button", onclick: function () {
+          if (!confirm("Gerar a etiqueta do pedido " + p.numero + " agora?\n\nO valor do frete será DEBITADO do saldo da sua carteira do Melhor Envio.")) return;
+          chamarEtiqueta("gerar", "Etiqueta gerada.");
+        } }, "Gerar etiqueta (debita o saldo)") : null,
+        et.estado === "gerada" ? h("button", { class: "btn sec mini", type: "button", onclick: function () {
+          chamarEtiqueta("imprimir", null, function (r) { if (r.url) window.open(r.url, "_blank", "noopener"); });
+        } }, "Imprimir etiqueta") : null,
+        et.estado === "gerada" && !et.rastreio ? h("button", { class: "btn sec mini", type: "button", onclick: function () { chamarEtiqueta("rastreio", "Rastreio atualizado."); } }, "Buscar rastreio") : null,
+        et.ordem && p.status !== "enviado" ? h("button", { class: "btn perigo mini", type: "button", onclick: function () {
+          if (!confirm("Cancelar a etiqueta deste pedido? O Melhor Envio devolve o valor ao seu saldo (pode levar até 12 horas).")) return;
+          chamarEtiqueta("cancelar", "Etiqueta cancelada.");
+        } }, "Cancelar etiqueta") : null));
+    }
     corpo.appendChild(h("h2", null, "Itens"));
     p.itens.forEach(function (i) { corpo.appendChild(h("div", { class: "linha-ped" }, h("span", null, i.qtd + "× " + i.nome + (i.promocao ? " (promoção)" : "")), h("span", null, reais(i.unitario * i.qtd)))); });
     corpo.appendChild(h("div", { class: "linha-ped" }, h("span", null, "Subtotal"), h("span", null, reais(p.subtotal))));
@@ -773,6 +799,12 @@
       email: h("input", { type: "text", maxlength: "120", value: c.email || "" }),
       dias: h("input", { type: "number", min: "0", max: "60", value: c.prazo_producao_dias_uteis }),
       envio: h("input", { type: "number", min: "0", max: "30", value: c.prazo_postagem_dias_uteis === undefined ? 2 : c.prazo_postagem_dias_uteis }),
+      meAtivo: h("input", { type: "checkbox", checked: !!(c.melhorenvio && c.melhorenvio.ativo) }),
+      meEtq: h("input", { type: "checkbox", checked: !!(c.melhorenvio && c.melhorenvio.etiquetas_ativas) }),
+      meNaoCom: h("input", { type: "checkbox", checked: !c.melhorenvio || c.melhorenvio.nao_comercial !== false }),
+      meOutros: h("input", { type: "text", value: ((c.melhorenvio && c.melhorenvio.servicos) || [1, 2]).filter(function (n) { return [1, 2, 3, 4, 17].indexOf(n) < 0; }).join(", "), placeholder: "Outros números de serviço (opcional)" }),
+      rem: ["nome", "telefone", "email", "documento", "cep", "rua", "numero", "complemento", "bairro", "cidade", "uf", "observacao"].reduce(function (o, k) {
+        o[k] = h("input", { type: "text", maxlength: k === "rua" ? "100" : "120", value: (c.remetente && c.remetente[k]) || "" }); return o; }, {}),
       retAtiva: h("input", { type: "checkbox", checked: !!(c.retirada && c.retirada.ativa) }),
       retNome: h("input", { type: "text", maxlength: "40", value: (c.retirada && c.retirada.nome) || "Retirada no local" }),
       retEnd: h("input", { type: "text", maxlength: "200", value: (c.retirada && c.retirada.endereco) || "", placeholder: "Ex.: Rua das Palmeiras, 123 - Centro, Vila Velha/ES" }),
@@ -817,6 +849,10 @@
       return h("div", null, h("label", null, rotulo), area);
     }
 
+    var resTeste = h("div");
+    var SERVICOS_ME = [[1, "PAC (Correios)"], [2, "SEDEX (Correios)"], [3, ".Package (Jadlog)"], [4, ".Com (Jadlog)"], [17, "Mini Envios (Correios)"]].map(function (x) {
+      return { id: x[0], nome: x[1], cb: h("input", { type: "checkbox", checked: ((c.melhorenvio && c.melhorenvio.servicos) || [1, 2]).indexOf(x[0]) >= 0 }) };
+    });
     var regBox = h("div");
     function mostrarRegioes() {
       limpar(regBox);
@@ -855,6 +891,9 @@
         loja: f.loja.value, slogan: f.slogan.value, whatsapp: f.whatsapp.value, instagram: f.instagram.value, email: f.email.value,
         prazo_producao_dias_uteis: Number(f.dias.value), prazo_postagem_dias_uteis: Number(f.envio.value || 0), frete_provisorio: lerReais(f.frete.value || "0"), aviso_prazo: f.aviso.value,
         frete_gratis_acima: f.gratis.value.trim() ? lerReais(f.gratis.value) : 0,
+        melhorenvio: { ativo: f.meAtivo.checked, etiquetas_ativas: f.meEtq.checked, nao_comercial: f.meNaoCom.checked,
+          servicos: SERVICOS_ME.filter(function (s) { return s.cb.checked; }).map(function (s) { return s.id; }).concat(f.meOutros.value.split(/[\s,;]+/).filter(Boolean).map(Number)) },
+        remetente: Object.keys(f.rem).reduce(function (o, k) { o[k] = f.rem[k].value; return o; }, {}),
         retirada: { ativa: f.retAtiva.checked, nome: f.retNome.value, endereco: f.retEnd.value, instrucoes: f.retInstr.value, ceps: f.retCeps.value.split(/[\s,;]+/).filter(Boolean) },
         aviso_loja: { emails: f.avEmails.value.split(/[\s,;]+/).filter(Boolean), ao_criar: f.avCriar.checked, ao_pagar: f.avPagar.checked },
         embalagem_padrao: { altura: lerReais(f.cxAlt.value), largura: lerReais(f.cxLarg.value), comprimento: lerReais(f.cxComp.value) },
@@ -886,6 +925,29 @@
       h("label", { class: "chk" }, f.retAtiva, "Oferecer retirada no local"),
       h("div", { class: "grade2" }, campo("Nome da opção", f.retNome), campo("Endereço da retirada", f.retEnd, "Aparece no fechamento da compra e no e-mail “pronto para retirada”.")),
       h("div", { class: "grade2" }, campo("Instruções (horário, referência...)", f.retInstr), campo("CEPs que podem retirar (opcional)", f.retCeps, "Começo do CEP, separado por vírgula. Vazio = qualquer CEP vê a opção.")),
+      secao("Melhor Envio (frete e etiquetas)", "Calcula o frete pelo CEP do cliente usando o seu cadastro no Melhor Envio. O token de acesso NÃO é digitado aqui: ele fica guardado como segredo no Cloudflare (MELHORENVIO_TOKEN). Salve antes de testar. Se o Melhor Envio falhar, o site usa a tabela por região (se houver)."),
+      h("label", { class: "chk" }, f.meAtivo, "Calcular o frete pelo Melhor Envio"),
+      h("label", null, "Serviços oferecidos ao cliente"),
+      h("div", { class: "barra" }, SERVICOS_ME.map(function (s) { return h("label", { class: "chk" }, s.cb, s.nome); })),
+      campo("Outros serviços (números, separados por vírgula)", f.meOutros, "Opcional. Os números ficam na lista de serviços do Melhor Envio."),
+      h("h2", null, "Remetente (quem envia)"),
+      h("p", { class: "dica" }, "O CEP é usado para calcular o frete. Os demais dados são necessários para gerar as etiquetas."),
+      h("div", { class: "grade3" }, campo("Nome", f.rem.nome), campo("Telefone com DDD", f.rem.telefone), campo("E-mail", f.rem.email)),
+      h("div", { class: "grade3" }, campo("CPF ou CNPJ", f.rem.documento), campo("CEP de origem", f.rem.cep), campo("Observação (opcional)", f.rem.observacao)),
+      h("div", { class: "grade3" }, campo("Rua", f.rem.rua), campo("Número", f.rem.numero), campo("Complemento", f.rem.complemento)),
+      h("div", { class: "grade3" }, campo("Bairro", f.rem.bairro), campo("Cidade", f.rem.cidade), campo("Estado (UF)", f.rem.uf)),
+      h("label", { class: "chk" }, f.meEtq, "Permitir gerar etiquetas pelo painel (a compra da etiqueta debita o saldo da sua carteira do Melhor Envio)"),
+      h("label", { class: "chk" }, f.meNaoCom, "Envio sem nota fiscal (declaração de conteúdo), para quem vende como pessoa física"),
+      h("div", { class: "barra" }, h("button", { class: "btn sec", type: "button", onclick: function () {
+        limpar(resTeste); resTeste.appendChild(h("p", { class: "dica" }, "Testando…"));
+        api("POST", "/melhorenvio/testar").then(function (r) {
+          limpar(resTeste);
+          if (!r.ok) { resTeste.appendChild(h("div", { class: "alerta" }, "⚠ " + r.mensagem)); return; }
+          resTeste.appendChild(h("div", { class: "cartao" }, h("b", null, "Conexão ok (" + r.ambiente + ")."), h("br"), "Cotação de teste (1 kg, para São Paulo): ",
+            r.servicos.map(function (s) { return h("div", null, s.nome + " · " + reais(s.preco) + (s.prazo !== null ? " · " + s.prazo + " dia(s) útil(eis) de transporte" : "")); })));
+        }).catch(function (e) { limpar(resTeste); if (e.message !== "sessão") resTeste.appendChild(h("div", { class: "alerta" }, "⚠ " + e.message)); });
+      } }, "Testar conexão com o Melhor Envio")),
+      resTeste,
       secao("Avisos por e-mail para a loja", "Receba um e-mail quando entrar um pedido, para responder rápido. Ao clicar em “responder”, a resposta vai direto para o cliente. O aviso só é enviado quando o envio de e-mails estiver ativo."),
       campo("E-mails que recebem o aviso (até 3)", f.avEmails, "Separe por vírgula."),
       h("label", { class: "chk" }, f.avPagar, "Avisar quando o pagamento for confirmado (recomendado)"),
