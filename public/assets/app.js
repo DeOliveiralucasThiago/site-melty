@@ -554,6 +554,51 @@
     });
   }
 
+  /* ---------- pagamento (Mercado Pago) ---------- */
+  function paginaPagar(d) {
+    var token = new URLSearchParams(location.search).get("t") || "";
+    var app = document.getElementById("app");
+    var timer = null;
+    function pedidoUrl() { return "pedido.html?t=" + encodeURIComponent(token); }
+    function falha(msg) { app.innerHTML = '<div class="wrap page"><h1>Pagamento</h1><div class="notice">' + esc(msg) + '</div><p><a href="index.html">Voltar para a loja</a></p></div>'; }
+    function vigiar() {
+      clearInterval(timer);
+      timer = setInterval(function () {
+        fetch("/api/pedidos/" + encodeURIComponent(token)).then(function (r) { return r.json(); }).then(function (p) {
+          if (p.status && p.status !== "aguardando_pagamento") { clearInterval(timer); location.href = pedidoUrl(); }
+        }).catch(function () { /* tenta de novo no próximo ciclo */ });
+      }, 5000);
+    }
+    function mostrarPix(p) {
+      app.innerHTML = '<div class="wrap page"><h1>Pague com Pix</h1><p class="muted">Pedido #' + p.numero + " · " + brl.format(p.total) + '</p>' +
+        '<div class="notice"><strong>Abra o app do seu banco</strong>, escolha pagar com Pix e leia o QR code ou use o “copia e cola”. Esta página confirma sozinha quando o pagamento chegar. O Pix vale por 30 minutos.</div>' +
+        (p.pix.qr_base64 ? '<p style="text-align:center"><img alt="QR code do Pix" width="240" height="240" src="data:image/png;base64,' + esc(p.pix.qr_base64) + '"></p>' : "") +
+        '<label for="pixcod">Pix copia e cola</label><textarea id="pixcod" readonly rows="4" style="width:100%">' + esc(p.pix.codigo) + '</textarea>' +
+        '<p><button class="btn" id="copiar">Copiar código</button> <span id="msg" class="small" role="status"></span></p>' +
+        '<p class="small muted">Já pagou? <a href="' + pedidoUrl() + '">Ver o pedido</a>.</p></div>';
+      document.getElementById("copiar").onclick = function () {
+        var t = document.getElementById("pixcod"); t.select();
+        var ok = function () { document.getElementById("msg").textContent = "Código copiado."; };
+        if (navigator.clipboard) navigator.clipboard.writeText(p.pix.codigo).then(ok, function () { document.execCommand("copy"); ok(); }); else { document.execCommand("copy"); ok(); }
+      };
+      vigiar();
+    }
+    fetch("/api/pagar/" + encodeURIComponent(token)).then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (p) {
+      if (p.status !== "aguardando_pagamento") { location.href = pedidoUrl(); return; }
+      if (p.pix) { mostrarPix(p); return; }
+      app.innerHTML = '<div class="wrap page"><h1>Pagamento</h1><p class="muted">Pedido #' + p.numero + " · " + brl.format(p.total) + '</p>' +
+        '<p>Reservamos seus itens até ' + esc(quando(p.expira_em)) + '. Escolha como quer pagar:</p>' +
+        '<p><button class="btn" id="pix">Pagar com Pix</button></p><p id="erro" class="small" role="alert"></p></div>';
+      document.getElementById("pix").onclick = function () {
+        var b = this; b.disabled = true; b.textContent = "Gerando o Pix…";
+        enviarJson("/api/pagar/" + encodeURIComponent(token), { metodo: "pix" }).then(function (r) {
+          if (!r.ok) { document.getElementById("erro").textContent = (r.dados && r.dados.erro) || "Não foi possível gerar o Pix."; b.disabled = false; b.textContent = "Pagar com Pix"; return; }
+          mostrarPix(r.dados);
+        }).catch(function () { document.getElementById("erro").textContent = "Sem conexão. Tente de novo."; b.disabled = false; b.textContent = "Pagar com Pix"; });
+      };
+    }).catch(function () { falha("Não encontramos este pedido. Confira o link que enviamos por e-mail."); });
+  }
+
   /* ---------- páginas de texto (editáveis pelo painel) ---------- */
   function paginaTexto(d) {
     var slug = document.body.getAttribute("data-slug") || "";
@@ -570,7 +615,7 @@
   }
 
   /* ---------- início ---------- */
-  var paginas = { home: paginaHome, catalogo: paginaCatalogo, produto: paginaProduto, carrinho: paginaCarrinho, texto: paginaTexto, checkout: paginaCheckout, pedido: paginaPedido, teste: paginaTeste };
+  var paginas = { home: paginaHome, catalogo: paginaCatalogo, produto: paginaProduto, carrinho: paginaCarrinho, texto: paginaTexto, checkout: paginaCheckout, pedido: paginaPedido, teste: paginaTeste, pagar: paginaPagar };
   carregar().then(function (d) {
     montarLayout(d);
     var tipo = document.body.getAttribute("data-page");

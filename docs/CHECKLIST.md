@@ -8,7 +8,7 @@ Tokens e chaves **nunca** vão no chat: use o formulário seguro que eu abrir, o
 
 _Bloqueiam as integrações. Tokens e chaves nunca vão no chat: use o formulário seguro que eu abrir ou cadastre como segredo no Cloudflare._
 
-- [ ] Mercado Pago: conta de vendedor aberta pela titular (sua esposa) e aplicação de teste criada em “Suas integrações”. Dela saem as credenciais de teste e a chave do webhook. _(bloqueia a publicação)_
+- [x] Mercado Pago: aplicação de teste criada (API de Orders) e Access Token de teste informado. Falta, para produção: conta de vendedora real verificada e credenciais de produção. _(bloqueia a publicação)_
 - [ ] Ativar o plugin do Mercado Pago no Claude, com acesso limitado. A titular da conta autoriza. Leia a tela de permissões antes de aceitar. _(bloqueia a publicação)_
 - [ ] Conferir as taxas e escolher as formas de pagamento (Pix, cartão, parcelamento). _(bloqueia a publicação)_
 - [ ] Melhor Envio: criar a conta de testes (sandbox) e gerar um token de acesso. Contas de teste e de produção são separadas. _(bloqueia a publicação)_
@@ -57,7 +57,7 @@ _Hoje o site tem fotos, descrições e textos provisórios._
 
 _Só começo depois que os itens acima estiverem prontos._
 
-- [ ] Ligar o Mercado Pago: adaptador, validação do aviso (webhook), Pix vencendo em 30 minutos e testes com compras de teste. Depende de: conta, aplicação de teste, plugin e taxas. _(Claude)_
+- [ ] Mercado Pago: **Pix pronto e testado na API de testes** (order, QR, expiração, cancelamento, webhook com assinatura, conferência de reserva). Falta o **cartão** (precisa da Public Key de teste e da biblioteca do Mercado Pago no navegador), configurar a URL e a chave secreta do webhook depois do deploy (`MERCADOPAGO_WEBHOOK_SECRET`) e conferir as taxas. _(Claude / você)_
 - [ ] Validar o Melhor Envio no sandbox: documento da pessoa física, envio sem nota fiscal, link de impressão e rastreio. Depende de: token e saldo de teste. _(Claude)_
 - [ ] Validar o envio real de e-mails com a chave do Resend. Depende de: conta e domínio verificado. _(Claude)_
 - [ ] Conferir as faixas de CEP por estado com fonte oficial e o link de rastreio com um código real. _(Claude)_
@@ -67,7 +67,7 @@ _Só começo depois que os itens acima estiverem prontos._
 ## Limitações conhecidas (não bloqueiam)
 
 - O reembolso é feito no painel do Mercado Pago; o botão do painel da loja só registra que foi feito.
-- Pagamento por cartão e Pix pendente só podem ser validados de verdade com o Mercado Pago ligado.
+- A aprovação de um Pix no ambiente de testes não pode ser simulada sem um pagador de teste real; o caminho “pago” é coberto por testes automáticos com a resposta simulada da API. A primeira compra real vai confirmar o fluxo ponta a ponta.
 - Alterações no painel podem levar até 20 segundos para aparecer na loja (cache).
 - Fora do escopo por enquanto: nota fiscal, newsletter, conta de cliente com “Meus pedidos”, WhatsApp automático e etiquetas de outras transportadoras fora do Melhor Envio.
 

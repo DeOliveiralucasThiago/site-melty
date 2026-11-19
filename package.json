@@ -8,7 +8,7 @@
     "db:local": "wrangler d1 migrations apply melty --local && wrangler d1 execute melty --local --file seed/seed.sql",
     "db:seed-gerar": "node scripts/gerar-seed.mjs",
     "db:reset": "rm -rf .wrangler && npm run db:local",
-    "test": "node tests/html.test.mjs && npm run db:reset && node tests/motor.test.mjs && npm run db:reset && node tests/pedidos.test.mjs && npm run db:reset && node tests/emails.test.mjs && npm run db:reset && node tests/frete.test.mjs && npm run db:reset && node tests/retirada.test.mjs && npm run db:reset && node tests/melhorenvio.test.mjs"
+    "test": "node tests/html.test.mjs && npm run db:reset && node tests/motor.test.mjs && npm run db:reset && node tests/pedidos.test.mjs && npm run db:reset && node tests/emails.test.mjs && npm run db:reset && node tests/frete.test.mjs && npm run db:reset && node tests/retirada.test.mjs && npm run db:reset && node tests/melhorenvio.test.mjs && npm run db:reset && node tests/mercadopago.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^3.114.0"

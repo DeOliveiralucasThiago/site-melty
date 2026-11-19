@@ -107,7 +107,7 @@ export async function criarPedido(env, corpo, { urlBase }) {
   const pedido = await db.prepare("SELECT * FROM pedidos WHERE token = ?").bind(token).first();
   try {
     const cob = await prov.criarCobranca({ pedido, itens: calc.itens, cliente, urlBase });
-    await db.prepare("UPDATE pedidos SET pagamento_url = ?, pagamento_ref = ? WHERE id = ?").bind(cob.url, cob.ref, pedido.id).run();
+    await db.prepare("UPDATE pedidos SET pagamento_url = ?, pagamento_ref = ?, provedor = ? WHERE id = ?").bind(cob.url, cob.ref, prov.nome, pedido.id).run();
     try { await enfileirar(db, pedido.id, "recebido", { env }); await enfileirarAvisoLoja(db, pedido.id, "criado", { env }); } catch (e) { console.error("e-mail recebido não enfileirado", e); }
     return { token, numero: numeroDoPedido(pedido.id), url: cob.url };
   } catch (err) {
@@ -134,6 +134,9 @@ export async function cancelarPedido(db, id, motivo, { somenteAguardando = true,
     await db.batch(itens.map((i) => db.prepare("UPDATE produtos SET estoque = estoque + ? WHERE id = ?").bind(i.qtd, i.produto_id)));
   }
   if (p.status === "aguardando_pagamento") await liberarUso(db, p.token);
+  if (p.status === "aguardando_pagamento" && p.provedor === "mercadopago" && p.pagamento_ref && env) {
+    try { const { cancelarOrder } = await import("./mercadopago.js"); await cancelarOrder(env, p.pagamento_ref); } catch (e) { console.error("cancelar order no Mercado Pago", e.message); }
+  }
   await evento(db, id, "cancelado", motivo);
   if (avisar) { try { await enfileirar(db, id, motivo === MOTIVO_EXPIRADO ? "expirado" : "cancelado", { env }); } catch (e) { console.error("e-mail de cancelamento não enfileirado", e); } }
   return true;

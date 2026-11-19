@@ -29,8 +29,10 @@ Fluxo: carrinho → `checkout.html` (dados, endereço, cupom) → `POST /api/ped
 - Painel > Pedidos: lista, dados de entrega, etapas (em preparo → enviado com rastreio → entregue), cancelar/reembolsado e alertas de conferência
   (CPF de quem pagou diferente, valor menor, pagamento depois de vencer).
 - **Provedor de pagamento** (`functions/_lib/pagamento.js`): `PAGAMENTO_PROVEDOR=teste` ativa um pagamento simulado (só desenvolvimento, nunca em produção).
-  **Mercado Pago ainda não está ligado**: falta validar na documentação oficial, com credenciais de teste, a assinatura do aviso (webhook),
-  o formato do pagamento (inclui CPF do pagador?) e qual API usar (Preferences x Orders). Sem provedor, a loja mantém o botão de WhatsApp.
+  **Mercado Pago (API de Orders):** `PAGAMENTO_PROVEDOR=mercadopago` + segredos `MERCADOPAGO_ACCESS_TOKEN` e `MERCADOPAGO_WEBHOOK_SECRET`.
+  O cliente paga na página `/pagar` do próprio site. **Pix** pronto e validado na API de testes (QR e copia e cola, vale 30 min, cancelado junto com o pedido vencido).
+  O aviso (`/api/mercadopago/webhook`) tem a assinatura conferida e o estado vem sempre de uma consulta à API, nunca do corpo do aviso. Como reserva, abrir o
+  acompanhamento do pedido também confere o pagamento. **Cartão ainda não está ligado** (falta a Public Key e o formulário do Mercado Pago no navegador).
 - **Frete (Fase 4, parte sem Melhor Envio):** o cliente informa o CEP e escolhe a entrega; o servidor monta o pacote a partir dos produtos (peso e medidas, ou a
   caixa padrão; itens empilhados) e cota por região (valor fixo por estado, configurado em Painel > Textos e contato), com opção de frete grátis acima de um valor.
   O estado vem do CEP (faixas em `functions/_lib/frete.js`, conferir antes de publicar). O prazo mostrado ao cliente é **único**: transporte + uma margem de dias (configurável, somada pelo sistema), **contado a partir do envio** (postagem). Não se fala em "produção" nem em prazo desde o pagamento para o cliente.
@@ -117,4 +119,4 @@ Instagram e Google não executam o JavaScript do site. Há também dados estrutu
 - Painel com política de conteúdo restrita (`public/_headers`).
 
 ## Próximas fases
-Ligar o Mercado Pago (Fase 3, pendente de credenciais e conferência da documentação), frete pelo Melhor Envio (Fase 4), e-mails automáticos (Fase 5).
+Cartão no Mercado Pago (Fase 3; o Pix já está pronto), frete pelo Melhor Envio (Fase 4), e-mails automáticos (Fase 5).

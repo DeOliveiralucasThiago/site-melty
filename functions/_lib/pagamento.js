@@ -6,8 +6,7 @@
 //
 // PAGAMENTO_PROVEDOR:
 //   "teste"        -> pagamento simulado, só para desenvolvimento (NUNCA usar em produção)
-//   "mercadopago"  -> ainda NÃO implementado: falta validar a documentação oficial (assinatura do aviso, formato do pagamento)
-//                     com credenciais de teste. Enquanto isso, o pagamento online fica desativado.
+//   "mercadopago"  -> Mercado Pago (API de Orders). Exige o segredo MERCADOPAGO_ACCESS_TOKEN. O cliente paga na página /pagar do próprio site.
 
 const provedorTeste = {
   nome: "teste",
@@ -16,7 +15,15 @@ const provedorTeste = {
   },
 };
 
+const provedorMercadoPago = {
+  nome: "mercadopago",
+  async criarCobranca({ pedido, urlBase }) {
+    return { url: `${urlBase}/pagar?t=${pedido.token}`, ref: "" };    // a order só é criada quando o cliente escolhe a forma de pagar
+  },
+};
+
 export function provedor(env) {
   if (env.PAGAMENTO_PROVEDOR === "teste") return provedorTeste;
+  if (env.PAGAMENTO_PROVEDOR === "mercadopago" && env.MERCADOPAGO_ACCESS_TOKEN) return provedorMercadoPago;
   return null;
 }
