@@ -197,10 +197,19 @@ export async function gerarEtiqueta(env, db, pedidoId, { contato, cfg }) {
 
 /** Busca o código de rastreio na etiqueta já gerada (pode demorar alguns instantes para aparecer). */
 export async function buscarRastreio(env, db, pedidoId, { contato, ordem }) {
-  const r = await chamar(env, contato, "POST", "/api/v2/me/shipment/tracking", { orders: [ordem] });
-  const x = r && r[ordem];
-  const cod = x && (x.tracking || x.melhorenvio_tracking) ? String(x.tracking || x.melhorenvio_tracking).toUpperCase() : "";
-  if (cod && /^[A-Z0-9]{8,30}$/.test(cod)) await db.prepare("UPDATE pedidos SET me_rastreio = ? WHERE id = ?").bind(cod, pedidoId).run();
+  // O detalhe da etiqueta é a fonte mais confiável: o endpoint /shipment/tracking pode seguir vazio
+  // mesmo depois de o código já existir (visto no sandbox real).
+  const extrai = (x) => {
+    const c = x && (x.tracking || x.melhorenvio_tracking || x.self_tracking) ? String(x.tracking || x.melhorenvio_tracking || x.self_tracking).toUpperCase() : "";
+    return /^[A-Z0-9]{8,30}$/.test(c) ? c : "";
+  };
+  let cod = "";
+  try { cod = extrai(await chamar(env, contato, "GET", `/api/v2/me/orders/${encodeURIComponent(ordem)}`)); } catch (e) { if (e && e.status === 401) throw e; }
+  if (!cod) {
+    const r = await chamar(env, contato, "POST", "/api/v2/me/shipment/tracking", { orders: [ordem] });
+    cod = extrai(r && r[ordem]);
+  }
+  if (cod) await db.prepare("UPDATE pedidos SET me_rastreio = ? WHERE id = ?").bind(cod, pedidoId).run();
   return cod;
 }
 

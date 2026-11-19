@@ -13,6 +13,7 @@ const t = (nome, cond, extra = "") => { cond ? ok++ : bad++; console.log(cond ? 
 const cod = async (fn) => { try { await fn(); return null; } catch (e) { return e instanceof ErroNegocio ? "N:" + e.codigo : e instanceof ErroME ? "ME:" + e.message : "ERRO:" + e.message; } };
 const setCfg = (k, v) => db.prepare("INSERT INTO config (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor").bind(k, JSON.stringify(v)).run();
 await db.prepare("UPDATE produtos SET estoque = 80").run();
+await db.prepare("DELETE FROM cotacoes_cache").run();
 
 // ---------- servidor de mentira ----------
 const realFetch = globalThis.fetch;
@@ -154,7 +155,7 @@ chamadas = [];
 const g1 = await gerar(ped1.p.id);
 const cart = chamadas.find((c) => c.caminho === "/api/v2/me/cart").corpo;
 t("etiqueta gerada: ordem, estado e código de rastreio (maiúsculas)", g1.estado === "gerada" && g1.ordem === ORDEM && g1.rastreio === "ME23002OWZ7BR", JSON.stringify(g1));
-t("etapas na ordem certa: carrinho → compra → geração → rastreio", chamadas.map((c) => c.caminho).join(" ") === "/api/v2/me/cart /api/v2/me/shipment/checkout /api/v2/me/shipment/generate /api/v2/me/shipment/tracking", chamadas.map((c) => c.caminho));
+t("etapas na ordem certa: carrinho → compra → geração → rastreio", chamadas.map((c) => c.caminho).join(" ") === "/api/v2/me/cart /api/v2/me/shipment/checkout /api/v2/me/shipment/generate /api/v2/me/orders/"+ORDEM+" /api/v2/me/shipment/tracking", chamadas.map((c) => c.caminho));
 t("carrinho: serviço do pedido, volume em inteiros, produtos como texto, envio não comercial e lembrete",
   cart.service === 1 && cart.volumes.length === 1 && cart.volumes[0].height === 21 && cart.volumes[0].width === 12 && cart.volumes[0].length === 16 && cart.volumes[0].weight === 0.84
   && cart.products[0].name === "Vela Bamboo Dreams" && cart.products[0].quantity === "2" && cart.products[0].unitary_value === "79.90"
@@ -168,7 +169,7 @@ t("andamento guardado no pedido e trava liberada", linha.me_estado === "gerada" 
 
 chamadas = [];
 const g2 = await gerar(ped1.p.id);
-t("gerar de novo NÃO compra outra etiqueta (só consulta o rastreio)", chamadas.map((c) => c.caminho).join() === "/api/v2/me/shipment/tracking" && g2.estado === "gerada", chamadas.map((c) => c.caminho));
+t("gerar de novo NÃO compra outra etiqueta (só consulta o rastreio)", chamadas.map((c) => c.caminho).join() === "/api/v2/me/orders/"+ORDEM+",/api/v2/me/shipment/tracking" && g2.estado === "gerada", chamadas.map((c) => c.caminho));
 
 // ---------- falha no meio: saldo insuficiente ----------
 const ped2 = await pedir([{ id: "cereja-avela", qtd: 1 }], { frete_id: "me:2" });
@@ -185,7 +186,7 @@ linha = await db.prepare("SELECT me_estado, me_ordem_id, me_erro, me_travado_em 
 t("saldo insuficiente: erro claro, andamento parado em 'carrinho' e trava liberada", falhou.includes("Saldo insuficiente") && linha.me_estado === "carrinho" && linha.me_ordem_id === ORDEM2 && linha.me_erro.includes("Saldo insuficiente") && linha.me_travado_em === null, JSON.stringify([falhou, linha]));
 saldoOk = true; chamadas = [];
 const g3 = await gerar(ped2.p.id);
-t("após repor o saldo, continua de onde parou: NÃO recria o carrinho", chamadas.map((c) => c.caminho).join(" ") === "/api/v2/me/shipment/checkout /api/v2/me/shipment/generate /api/v2/me/shipment/tracking" && g3.rastreio === "ME99999AAA1BR", chamadas.map((c) => c.caminho));
+t("após repor o saldo, continua de onde parou: NÃO recria o carrinho", chamadas.map((c) => c.caminho).join(" ") === "/api/v2/me/shipment/checkout /api/v2/me/shipment/generate /api/v2/me/orders/"+ORDEM2+" /api/v2/me/shipment/tracking" && g3.rastreio === "ME99999AAA1BR", chamadas.map((c) => c.caminho));
 
 // ---------- dois cliques ao mesmo tempo ----------
 const ped3 = await pedir([{ id: "lavanda", qtd: 1 }], { frete_id: "me:1" });
@@ -274,6 +275,15 @@ const tz = await testarConexao(env, db, { contato: CONTATO, cepOrigem: "29100000
 t("teste de conexão: se nenhum destino tem preço, devolve lista vazia (o painel explica o CEP genérico)", tz.opcoes.length === 0);
 respostas["/api/v2/me/shipment/calculate"] = () => ({ status: 401, json: { message: "Unauthenticated." } });
 t("teste de conexão com token vencido: erro claro", (await cod(() => testarConexao(env, db, { contato: CONTATO, cepOrigem: "29100000", servicos: [1, 2] }))).includes("não reconheceu o token"));
+
+// comportamento visto no sandbox real: /shipment/tracking vazio, mas o detalhe da etiqueta já traz o código
+const ORDEM4 = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+respostas["/api/v2/me/orders/" + ORDEM4] = () => ({ json: { id: ORDEM4, status: "released", tracking: "QJ43682530BR", generated_at: "2026-11-19 15:22:43" } });
+respostas["/api/v2/me/shipment/tracking"] = () => ({ json: { [ORDEM4]: { tracking: null, melhorenvio_tracking: null } } });
+const pRast = await db.prepare("SELECT id FROM pedidos LIMIT 1").first();
+chamadas = [];
+const codReal = await buscarRastreio(env, db, pRast.id, { contato: CONTATO, ordem: ORDEM4 });
+t("rastreio: usa o detalhe da etiqueta quando /tracking vem vazio", codReal === "QJ43682530BR" && chamadas.length === 1, JSON.stringify(chamadas.map((c) => c.caminho)));
 
 globalThis.fetch = realFetch;
 console.log(`\n${ok} ok, ${bad} falhas`);
