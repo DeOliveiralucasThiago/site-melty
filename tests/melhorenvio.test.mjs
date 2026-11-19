@@ -1,7 +1,7 @@
 import { getPlatformProxy } from "wrangler";
 import { cotarFrete } from "../functions/_lib/frete.js";
 import { criarPedido, aplicarPagamento, mudarStatus } from "../functions/_lib/pedidos.js";
-import { gerarEtiqueta, linkEtiqueta, cancelarEtiqueta, buscarRastreio, ErroME } from "../functions/_lib/melhorenvio.js";
+import { gerarEtiqueta, linkEtiqueta, cancelarEtiqueta, buscarRastreio, testarConexao, ErroME } from "../functions/_lib/melhorenvio.js";
 import { ErroNegocio } from "../functions/_lib/cupons.js";
 
 const { env: base, dispose } = await getPlatformProxy({ configPath: new URL("../wrangler.toml", import.meta.url).pathname, persist: { path: new URL("../.wrangler/state/v3", import.meta.url).pathname } });
@@ -256,6 +256,24 @@ t("erro 422 no formato do carrinho vira mensagem legível", m4.includes("Peso do
 respostas["/api/v2/me/cart"] = () => ({ status: 401, json: { message: "Unauthenticated." } });
 const m5 = await cod(() => gerar(ped4.p.id));
 t("token vencido durante a etiqueta: mensagem pede um novo token (sem vazar o token)", m5.includes("token") && m5.includes("novo token") && !m5.includes(TOKEN), m5);
+
+// ---------- permissões do token e teste de conexão ----------
+respostas["/api/v2/me/cart"] = () => ({ status: 403, json: { message: "This action is unauthorized." } });
+const m6 = await cod(() => gerar(ped4.p.id));
+t("403 = falta permissão (diferente de token vencido): a mensagem lista as permissões a marcar", m6.includes("não tem permissão") && m6.includes("carrinho") && !m6.includes("vencido"), m6);
+const semAlcance = () => ({ json: [{ id: 1, name: "PAC", error: "Transportadora não atende este trecho.", company: { name: "Correios" } }, { id: 2, name: "SEDEX", error: "Transportadora não atende este trecho.", company: { name: "Correios" } }] });
+respostas["/api/v2/me/shipment/calculate"] = (corpo) => (corpo.to.postal_code === "20040020" ? calculoOk() : semAlcance());
+chamadas = [];
+const tc = await testarConexao(env, db, { contato: CONTATO, cepOrigem: "29100000", servicos: [1, 2] });
+t("teste de conexão: tenta outros destinos até achar preço (01001000 sem alcance → 20040020)", tc.opcoes.length === 2 && chamadas.filter((c) => c.caminho.endsWith("/calculate")).map((c) => c.corpo.to.postal_code).join() === "01001000,20040020", JSON.stringify(chamadas.map((c) => c.corpo?.to?.postal_code)));
+t("teste de conexão: detecta que falta a permissão de carrinho", tc.carrinho === false);
+respostas["/api/v2/me/cart"] = () => ({ json: [] });
+t("teste de conexão: detecta que o token tem a permissão de carrinho", (await testarConexao(env, db, { contato: CONTATO, cepOrigem: "29100000", servicos: [1, 2] })).carrinho === true);
+respostas["/api/v2/me/shipment/calculate"] = semAlcance;
+const tz = await testarConexao(env, db, { contato: CONTATO, cepOrigem: "29100000", servicos: [1, 2] });
+t("teste de conexão: se nenhum destino tem preço, devolve lista vazia (o painel explica o CEP genérico)", tz.opcoes.length === 0);
+respostas["/api/v2/me/shipment/calculate"] = () => ({ status: 401, json: { message: "Unauthenticated." } });
+t("teste de conexão com token vencido: erro claro", (await cod(() => testarConexao(env, db, { contato: CONTATO, cepOrigem: "29100000", servicos: [1, 2] }))).includes("não reconheceu o token"));
 
 globalThis.fetch = realFetch;
 console.log(`\n${ok} ok, ${bad} falhas`);

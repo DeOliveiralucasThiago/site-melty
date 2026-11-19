@@ -5,6 +5,8 @@
 // Só para desenvolvimento: MELHORENVIO_AMBIENTE="teste" + MELHORENVIO_URL=http://localhost:xxxx aponta para um servidor de mentira.
 import { numeroDoPedido } from "./util.js";
 
+const soDigitos = (t) => String(t ?? "").replace(/\D/g, "");
+
 export class ErroME extends Error {
   constructor(mensagem, status = 0, detalhes = null) { super(mensagem); this.status = status; this.detalhes = detalhes; }
 }
@@ -44,7 +46,8 @@ async function chamar(env, contato, metodo, caminho, corpo, { timeoutMs = 9000 }
   const texto = await r.text();
   let j = null; try { j = texto ? JSON.parse(texto) : null; } catch { /* resposta não é JSON */ }
   if (!r.ok) {
-    if (r.status === 401 || r.status === 403) throw new ErroME("O Melhor Envio recusou o acesso: o token é inválido, venceu ou não tem permissão. Gere um novo token no painel do Melhor Envio.", r.status, j);
+    if (r.status === 401) throw new ErroME("O Melhor Envio não reconheceu o token (inválido ou vencido). Gere um novo token no painel do Melhor Envio.", 401, j);
+    if (r.status === 403) throw new ErroME("O token não tem permissão para esta ação. Ao gerar o token no Melhor Envio, marque as permissões de cotação, carrinho, compra, geração, impressão, rastreio e cancelamento de etiquetas.", 403, j);
     throw new ErroME(mensagemDeErro(j) || `O Melhor Envio respondeu com erro ${r.status}.`, r.status, j);
   }
   return j;
@@ -97,15 +100,24 @@ export async function cotarMelhorEnvio(env, db, { contato, cepOrigem, cepDestino
     .sort((a, b) => a.preco_centavos - b.preco_centavos);
 }
 
-/** Teste de conexão (não gasta nada): cota 1 kg de um CEP de origem para São Paulo. */
+/**
+ * Teste de conexão (não gasta nada): cota 1 kg a partir do CEP de origem para alguns destinos (para no primeiro que tiver preço)
+ * e confere se o token tem a permissão de carrinho (necessária para gerar etiquetas).
+ */
 export async function testarConexao(env, db, { contato, cepOrigem, servicos }) {
-  const ops = await cotarMelhorEnvio(env, null, { contato, cepOrigem, cepDestino: "01001000", pacote: { largura_cm: 16, altura_cm: 11, comprimento_cm: 16, peso_kg: 1 }, valorCentavos: 5000, servicos });
-  return ops;
+  const origem = soDigitos(cepOrigem);
+  let opcoes = [];
+  for (const destino of ["01001000", "20040020", "30140071"]) {
+    if (destino === origem) continue;
+    opcoes = await cotarMelhorEnvio(env, null, { contato, cepOrigem, cepDestino: destino, pacote: { largura_cm: 16, altura_cm: 11, comprimento_cm: 16, peso_kg: 1 }, valorCentavos: 5000, servicos });
+    if (opcoes.length) break;
+  }
+  let carrinho = null;   // true = tem permissão; false = falta; null = não deu para saber
+  try { await chamar(env, contato, "GET", "/api/v2/me/cart"); carrinho = true; } catch (e) { carrinho = e instanceof ErroME && e.status === 403 ? false : null; }
+  return { opcoes, carrinho };
 }
 
 /* ---------------- etiquetas ---------------- */
-const soDigitos = (t) => String(t ?? "").replace(/\D/g, "");
-
 export function remetenteCompleto(r) {
   return !!(r && r.nome && soDigitos(r.telefone).length >= 10 && r.email && [11, 14].includes(soDigitos(r.documento).length) && r.rua && r.numero && r.bairro && r.cidade && r.uf && soDigitos(r.cep).length === 8);
 }

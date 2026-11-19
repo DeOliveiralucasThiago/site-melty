@@ -408,7 +408,7 @@
     function desenharOpcoes() {
       var box = $("entrega");
       if (!estado.opcoes) return;
-      if (!estado.opcoes.length) { box.innerHTML = '<p class="erro">Ainda não entregamos neste CEP. <a href="https://wa.me/' + esc(d.config.whatsapp) + '" rel="noopener">Fale com a gente pelo WhatsApp</a>.</p>'; return; }
+      if (!estado.opcoes.length) { box.innerHTML = '<p class="erro">Não encontramos opções de entrega para este CEP. Confira se o CEP está correto ou <a href="https://wa.me/' + esc(d.config.whatsapp) + '" rel="noopener">fale com a gente pelo WhatsApp</a>.</p>'; return; }
       box.innerHTML = estado.opcoes.map(function (o) {
         return '<label class="opcao"><input type="radio" name="frete" value="' + esc(o.id) + '"' + (o.id === estado.frete_id ? " checked" : "") + "><span><b>" + esc(o.servico) + "</b> · " + (o.preco > 0 ? brl.format(o.preco) : "Grátis") +
           (o.retirada ? '<br><span class="small muted">Retire em: ' + esc(o.endereco) + (o.instrucoes ? ". " + esc(o.instrucoes) : "") + "</span>" : "") +

@@ -933,7 +933,7 @@
       h("h2", null, "Remetente (quem envia)"),
       h("p", { class: "dica" }, "O CEP é usado para calcular o frete. Os demais dados são necessários para gerar as etiquetas."),
       h("div", { class: "grade3" }, campo("Nome", f.rem.nome), campo("Telefone com DDD", f.rem.telefone), campo("E-mail", f.rem.email)),
-      h("div", { class: "grade3" }, campo("CPF ou CNPJ", f.rem.documento), campo("CEP de origem", f.rem.cep), campo("Observação (opcional)", f.rem.observacao)),
+      h("div", { class: "grade3" }, campo("CPF ou CNPJ", f.rem.documento), campo("CEP de origem", f.rem.cep, "Use o CEP da rua. O CEP geral da cidade (ex.: 29100-000) não é aceito pelo Melhor Envio."), campo("Observação (opcional)", f.rem.observacao)),
       h("div", { class: "grade3" }, campo("Rua", f.rem.rua), campo("Número", f.rem.numero), campo("Complemento", f.rem.complemento)),
       h("div", { class: "grade3" }, campo("Bairro", f.rem.bairro), campo("Cidade", f.rem.cidade), campo("Estado (UF)", f.rem.uf)),
       h("label", { class: "chk" }, f.meEtq, "Permitir gerar etiquetas pelo painel (a compra da etiqueta debita o saldo da sua carteira do Melhor Envio)"),
@@ -943,7 +943,9 @@
         api("POST", "/melhorenvio/testar").then(function (r) {
           limpar(resTeste);
           if (!r.ok) { resTeste.appendChild(h("div", { class: "alerta" }, "⚠ " + r.mensagem)); return; }
-          resTeste.appendChild(h("div", { class: "cartao" }, h("b", null, "Conexão ok (" + r.ambiente + ")."), h("br"), "Cotação de teste (1 kg, para São Paulo): ",
+          if (r.carrinho === false) resTeste.appendChild(h("div", { class: "alerta" }, "⚠ A cotação funciona, mas o token NÃO tem a permissão de carrinho. Sem ela não é possível gerar etiquetas. Gere um novo token no Melhor Envio marcando também as permissões de carrinho, compra, geração, impressão, rastreio e cancelamento."));
+          else if (r.carrinho === true) resTeste.appendChild(h("p", { class: "dica" }, "✓ O token tem a permissão de carrinho (necessária para gerar etiquetas)."));
+          resTeste.appendChild(h("div", { class: "cartao" }, h("b", null, "Conexão ok (" + r.ambiente + ")."), h("br"), "Cotação de teste (1 kg): ",
             r.servicos.map(function (s) { return h("div", null, s.nome + " · " + reais(s.preco) + (s.prazo !== null ? " · " + s.prazo + " dia(s) útil(eis) de transporte" : "")); })));
         }).catch(function (e) { limpar(resTeste); if (e.message !== "sessão") resTeste.appendChild(h("div", { class: "alerta" }, "⚠ " + e.message)); });
       } }, "Testar conexão com o Melhor Envio")),

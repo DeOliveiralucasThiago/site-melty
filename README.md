@@ -46,7 +46,10 @@ faz uma cotação de teste (não gasta nada) e mostra os serviços/preços ou o 
 - **Etiquetas:** no detalhe do pedido pago (entrega Melhor Envio): "Gerar etiqueta" faz carrinho → **compra (debita o saldo da carteira)** → geração → rastreio; guarda o andamento, não
   compra duas vezes (trava contra clique duplo) e, se faltar saldo, continua de onde parou. Há "Imprimir" (link privado), "Buscar rastreio" e "Cancelar etiqueta" (estorno em até 12 h,
   segundo a documentação). Ao marcar como enviado, o rastreio da etiqueta vai no e-mail. A geração só funciona com "Permitir gerar etiquetas" ligado.
-- **Status da validação:** escrito conforme a documentação oficial e testado com um servidor simulado; **ainda não validado no sandbox do Melhor Envio com token real**. Pontos a conferir
+- **Validado no sandbox real (token de teste):** a cotação (resposta 200, campo `error` por serviço, `custom_price`/`custom_delivery_time`) funciona pelo código da loja. Descobertas:
+  o sandbox/Melhor Envio **não aceita CEP genérico de cidade** (ex.: 29100-000) na origem nem no destino (use CEP de rua) e o token precisa das permissões de **carrinho**, compra,
+  geração, impressão, rastreio e cancelamento (sem a de carrinho a criação da etiqueta dá 403). `node scripts/validar-melhorenvio.mjs` roda o fluxo completo no sandbox.
+- **Status da validação (etiquetas):** escrito conforme a documentação oficial e testado com um servidor simulado; **ainda não validado no sandbox do Melhor Envio com token real**. Pontos a conferir
   lá: como pessoa física informa documento (`document` x `company_document`), `non_commercial`, e o formato da URL de impressão. O token do painel pode vencer: se aparecer
   "token recusado", gere outro.
 
