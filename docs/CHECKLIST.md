@@ -22,7 +22,12 @@ _Bloqueiam as integrações. Tokens e chaves nunca vão no chat: use o formulár
 
 _Hoje o site tem fotos, descrições e textos provisórios._
 
-- [ ] Medidas (altura, largura, comprimento) e peso da caixa de uma vela e de duas ou três juntas. Sem isso o frete sai errado. _(bloqueia a publicação)_
+- [ ] **Caixas e velas (medir e pesar antes de implementar o frete por caixa).** _(bloqueia a publicação)_
+  - Caixas: uma montada de cada tamanho (para 1–2 velas, 3–4 e mais), com enchimento, como seria enviada. Anotar medidas **externas** (comprimento × largura × altura, em cm, arredondando para cima), peso da caixa vazia, peso da caixa cheia e quantas velas cabem de verdade.
+  - Velas: peso de cada modelo/tamanho já embalado, medidas externas (diâmetro ou largura × altura) e se há mais de um tamanho à venda.
+  - Decidir: faixas por quantidade (ex.: 1–2, 3–4, 5+; hoje “3 a 4” e “4+” se sobrepõem no 4) e o que fazer acima da maior caixa (dois volumes ou limite por pedido).
+  - Conferir os limites dos Correios (mínimo 11 × 16 × 2 cm; maior lado até 105 cm; soma das três medidas até 200 cm).
+  - Depois disso: implementar o cadastro de caixas no painel, escolha automática da menor caixa e cotação por caixa. O Melhor Envio não guarda caixas, então o cadastro é no painel da Melty.
 - [ ] Fotos reais das velas, logo e banners. O banner atual é de teste e tem marca d’água. _(bloqueia a publicação)_
 - [ ] Descrições reais das velas, estoque real e preços finais. Hoje as descrições dizem “Descrição completa em breve”. _(bloqueia a publicação)_
 - [ ] Texto do “Quem somos” com a história real e, se houver, depoimentos reais. A seção de depoimentos fica escondida enquanto estiver vazia.
