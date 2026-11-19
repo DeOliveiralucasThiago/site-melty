@@ -37,6 +37,7 @@ _Hoje o site tem fotos, descrições e textos provisórios._
 
 ## Decisões de funcionamento
 
+- [ ] Parcelamento no cartão: hoje só à vista (1x). Para permitir mais parcelas, definir `MERCADOPAGO_PARCELAS_MAX` (até 12) e conferir no Mercado Pago quem paga os juros (loja ou cliente). Só aceita cartão de crédito por enquanto (débito fica de fora).
 - [ ] Definir os dias de margem somados ao transporte (hoje 3) e o prazo para enviar o pedido (hoje 2 dias úteis).
 - [ ] Frete grátis a partir de algum valor? Quanto?.
 - [ ] Retirada no local: oferecer ou não, e com qual endereço, horário e CEPs. Considerem se querem exibir o endereço de casa antes do pagamento.
@@ -57,7 +58,7 @@ _Hoje o site tem fotos, descrições e textos provisórios._
 
 _Só começo depois que os itens acima estiverem prontos._
 
-- [ ] Mercado Pago: **Pix pronto e testado na API de testes** (order, QR, expiração, cancelamento, webhook com assinatura, conferência de reserva). Falta o **cartão** (precisa da Public Key de teste e da biblioteca do Mercado Pago no navegador), configurar a URL e a chave secreta do webhook depois do deploy (`MERCADOPAGO_WEBHOOK_SECRET`) e conferir as taxas. _(Claude / você)_
+- [ ] Mercado Pago: **Pix e cartão de crédito prontos e testados na API de testes** (aprovado, recusado, sem limite, dados inválidos; recusa volta como HTTP 402 e é tratada). Falta: (1) testar o formulário de cartão no navegador depois da publicação, porque no ambiente de desenvolvimento do Claude o Mercado Pago bloqueia o formulário (PolicyAgent 403); (2) configurar a URL e a chave secreta do webhook depois do deploy (`MERCADOPAGO_WEBHOOK_SECRET`); (3) conferir as taxas. _(Claude / você)_
 - [ ] Validar o Melhor Envio no sandbox: documento da pessoa física, envio sem nota fiscal, link de impressão e rastreio. Depende de: token e saldo de teste. _(Claude)_
 - [ ] Validar o envio real de e-mails com a chave do Resend. Depende de: conta e domínio verificado. _(Claude)_
 - [ ] Conferir as faixas de CEP por estado com fonte oficial e o link de rastreio com um código real. _(Claude)_

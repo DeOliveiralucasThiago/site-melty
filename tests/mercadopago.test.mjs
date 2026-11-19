@@ -9,7 +9,7 @@ import { ErroNegocio } from "../functions/_lib/cupons.js";
 
 const { env: base, dispose } = await getPlatformProxy({ configPath: new URL("../wrangler.toml", import.meta.url).pathname, persist: { path: new URL("../.wrangler/state/v3", import.meta.url).pathname } });
 const TOKEN = "APP_USR-token-de-teste-9876543210", SEGREDO = "segredo_do_webhook_de_teste";
-const env = { ...base, PAGAMENTO_PROVEDOR: "mercadopago", EMAIL_PROVEDOR: "teste", MERCADOPAGO_ACCESS_TOKEN: TOKEN, MERCADOPAGO_WEBHOOK_SECRET: SEGREDO };
+const env = { ...base, PAGAMENTO_PROVEDOR: "mercadopago", EMAIL_PROVEDOR: "teste", MERCADOPAGO_ACCESS_TOKEN: TOKEN, MERCADOPAGO_WEBHOOK_SECRET: SEGREDO, MERCADOPAGO_PUBLIC_KEY: "APP_USR-chave-publica-de-teste" };
 const db = env.DB;
 let ok = 0, bad = 0;
 const t = (nome, cond, extra = "") => { cond ? ok++ : bad++; console.log(cond ? "OK  " : "FALHA", nome, cond ? "" : String(extra).slice(0, 600)); };
@@ -30,6 +30,16 @@ globalThis.fetch = async (url, opt = {}) => {
   const corpo = opt.body ? JSON.parse(opt.body) : null;
   chamadas.push({ caminho, metodo: opt.method || "GET", headers: opt.headers, corpo });
   const resp = (status, j) => new Response(JSON.stringify(j), { status, headers: { "content-type": "application/json" } });
+  if (caminho === "/v1/orders" && opt.method === "POST" && corpo.transactions.payments[0].payment_method.type === "credit_card") {
+    const pm = corpo.transactions.payments[0].payment_method, id = "ORDTSTCARD" + crypto.createHash("md5").update(opt.headers["X-Idempotency-Key"]).digest("hex").toUpperCase();
+    if (/RECUSA|SEMLIMITE/.test(pm.token)) {
+      const det = /SEMLIMITE/.test(pm.token) ? "insufficient_amount" : "rejected_by_issuer";
+      const o = { id, external_reference: corpo.external_reference, total_amount: corpo.total_amount, total_paid_amount: "0.00", status: "failed", status_detail: "failed", transactions: { payments: [{ id: "PAYX", status: "failed", status_detail: det }] } };
+      orders[id] = o; return resp(402, { errors: [{ code: "failed", message: "The following transactions failed", details: ["PAYX: " + det] }], data: o });
+    }
+    orders[id] = { id, external_reference: corpo.external_reference, total_amount: corpo.total_amount, total_paid_amount: corpo.total_amount, status: "processed", status_detail: "accredited", transactions: { payments: [{ id: "PAYC", status: "processed", status_detail: "accredited" }] } };
+    return resp(201, orders[id]);
+  }
   if (caminho === "/v1/orders" && opt.method === "POST") {
     const chave = opt.headers["X-Idempotency-Key"];
     const id = "ORDTST" + crypto.createHash("md5").update(chave).digest("hex").toUpperCase();
@@ -49,7 +59,8 @@ const CPF = "52998224725";
 const cliente = (extra = {}) => ({ nome: "João da Silva", email: "joao@exemplo.com", telefone: "27988887777", cpf: CPF, cep: "01001-000", rua: "Praça da Sé", numero: "100", complemento: "", bairro: "Sé", cidade: "São Paulo", uf: "SP", aceite: true, ...extra });
 const pedir = async (itens = [{ id: "bamboo-dreams", qtd: 1 }]) => { const r = await criarPedido(env, { itens, cliente: cliente() }, { urlBase: "https://loja.exemplo" }); return { ...r, p: await db.prepare("SELECT * FROM pedidos WHERE token = ?").bind(r.token).first() }; };
 const recarregar = (id) => db.prepare("SELECT * FROM pedidos WHERE id = ?").bind(id).first();
-const POST = (corpo, headers = {}) => new Request("https://loja.exemplo/x", { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": "1.2.3.4", ...headers }, body: JSON.stringify(corpo) });
+let ipN = 0;   // cada chamada com IP próprio, para o limitador de tentativas não atrapalhar
+const POST = (corpo, headers = {}) => new Request("https://loja.exemplo/x", { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": `10.0.${Math.floor(++ipN / 250)}.${ipN % 250}`, ...headers }, body: JSON.stringify(corpo) });
 const assinar = (dataId, { ts = String(Math.floor(Date.now() / 1000)), reqId = "req-1", segredo = SEGREDO } = {}) =>
   `ts=${ts},v1=${crypto.createHmac("sha256", segredo).update(`id:${dataId};request-id:${reqId};ts:${ts};`).digest("hex")}`;
 const aviso = (dataId, { sig, tipo = "order", reqId = "req-1" } = {}) => new Request(`https://loja.exemplo/api/mercadopago/webhook?data.id=${dataId}&type=${tipo}`, {
@@ -60,6 +71,9 @@ const cod = async (fn) => { try { await fn(); return null; } catch (e) { return 
 const A = await pedir();
 t("pedido leva à página /pagar do próprio site e grava o provedor", A.url === `https://loja.exemplo/pagar?t=${A.token}` && A.p.provedor === "mercadopago" && A.p.pagamento_ref === "", JSON.stringify([A.url, A.p.provedor]));
 t("criar o pedido NÃO chama o Mercado Pago (a order só nasce ao escolher Pix)", chamadas.length === 0);
+// limitador de tentativas
+{ const L = await pedir(); let ultimo; for (let i = 0; i < 22; i++) ultimo = await pagarPost({ request: new Request("https://loja.exemplo/x", { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": "9.9.9.9" }, body: JSON.stringify({ metodo: "boleto" }) }), env, params: { token: L.token }, waitUntil });
+  t("muitas tentativas seguidas do mesmo IP: 429", ultimo.status === 429, ultimo.status); }
 const semToken = await cod(() => criarPedido({ ...env, MERCADOPAGO_ACCESS_TOKEN: undefined }, { itens: [{ id: "bamboo-dreams", qtd: 1 }], cliente: cliente() }, { urlBase: "https://x" }));
 t("sem token do Mercado Pago o pagamento fica indisponível (nunca vira pedido de graça)", semToken === "N:pagamento_inativo", semToken);
 
@@ -77,7 +91,7 @@ r = await pagarPost({ request: POST({ metodo: "pix" }), env, params: { token: A.
 t("pedir Pix de novo devolve o mesmo, sem nova chamada", r.status === 200 && (await r.json()).pix.codigo === j.pix.codigo && chamadas.length === n);
 r = await pagarGet({ env, params: { token: A.token } }); j = await r.json();
 t("GET /pagar mostra número, total e Pix, sem CPF/e-mail/telefone", j.pix && j.total > 0 && !JSON.stringify(j).includes(CPF) && !JSON.stringify(j).includes("joao@") && !JSON.stringify(j).includes("27988887777"));
-t("token do Mercado Pago nunca aparece nas respostas", !JSON.stringify(j).includes("APP_USR"));
+t("token do Mercado Pago nunca aparece nas respostas", !JSON.stringify(j).includes(TOKEN));
 r = await pagarPost({ request: POST({ metodo: "boleto" }), env, params: { token: A.token } });
 t("forma de pagamento inválida é recusada", r.status === 400);
 r = await pagarGet({ env, params: { token: "0".repeat(32) } });
@@ -161,6 +175,57 @@ const G = await recarregar(F.p.id);
 r = await pagarPost({ request: POST({ metodo: "pix" }), env, params: { token: F.token } });
 t("pedido cancelado não gera novo Pix", r.status === 409);
 
+// ---------- cartão ----------
+const cartao = (token, extra = {}) => ({ metodo: "cartao", token, payment_method_id: "master", installments: 1, ...extra });
+const H1 = await pedir();
+r = await pagarGet({ env, params: { token: H1.token } }); j = await r.json();
+t("GET /pagar informa a chave pública (não secreta) e as parcelas", j.cartao && j.cartao.public_key === "APP_USR-chave-publica-de-teste" && j.cartao.parcelas_max === 1 && !JSON.stringify(j).includes(TOKEN), JSON.stringify(j.cartao));
+r = await pagarGet({ env: { ...env, MERCADOPAGO_PUBLIC_KEY: undefined }, params: { token: H1.token } });
+t("sem chave pública o cartão fica escondido", (await r.json()).cartao === null);
+r = await pagarPost({ request: POST(cartao("TOKENCARTAO1234567890")), env: { ...env, MERCADOPAGO_PUBLIC_KEY: undefined }, params: { token: H1.token }, waitUntil });
+t("sem chave pública o servidor recusa cartão (503)", r.status === 503);
+chamadas = [];
+for (const [nome, corpo] of [["token curto", cartao("abc")], ["token com lixo", cartao("TOKEN<script>12345678")], ["parcelas acima do máximo (1)", cartao("TOKENCARTAO1234567890", { installments: 3 })], ["parcelas 0", cartao("TOKENCARTAO1234567890", { installments: 0 })], ["parcelas fracionadas", cartao("TOKENCARTAO1234567890", { installments: 1.5 })], ["bandeira inválida", cartao("TOKENCARTAO1234567890", { payment_method_id: "../x" })]]) {
+  r = await pagarPost({ request: POST(corpo), env, params: { token: H1.token }, waitUntil });
+  t(`cartão: ${nome} é recusado antes de falar com o Mercado Pago`, r.status === 400, r.status);
+}
+t("nenhuma dessas tentativas chegou ao Mercado Pago", chamadas.length === 0);
+
+// recusado (HTTP 402 com a order dentro do erro)
+r = await pagarPost({ request: POST(cartao("TOKENRECUSA1234567890")), env, params: { token: H1.token }, waitUntil });
+j = await r.json();
+t("cartão recusado: mensagem amigável (402), sem detalhes do banco", r.status === 402 && j.aprovado === false && /banco não autorizou/.test(j.erro) && !/rejected|PAYX|ORD/.test(JSON.stringify(j)), JSON.stringify(j));
+let H1b = await recarregar(H1.p.id);
+t("recusa: pedido continua aguardando, order recusada não substitui a referência e fica no histórico", H1b.status === "aguardando_pagamento" && H1b.pagamento_ref === "" && !!(await db.prepare("SELECT 1 FROM pedido_eventos WHERE pedido_id = ? AND tipo = 'pagamento_recusado'").bind(H1.p.id).first()));
+r = await pagarPost({ request: POST(cartao("TOKENSEMLIMITE12345678")), env, params: { token: H1.token }, waitUntil });
+t("sem limite: mensagem específica", /limite ou saldo/.test((await r.json()).erro));
+
+// aprovado: usa valor, CPF e e-mail do PEDIDO, não do navegador
+chamadas = [];
+r = await pagarPost({ request: POST({ ...cartao("TOKENAPROVADO12345678"), transaction_amount: 0.01, payer: { email: "fraude@x.com", identification: { number: "11111111111" } }, total: 1 }), env, params: { token: H1.token }, waitUntil });
+j = await r.json();
+const cc = chamadas.find((x) => x.caminho === "/v1/orders").corpo;
+t("cartão aprovado: 201 e pedido vira 'pago'", r.status === 201 && j.aprovado === true && (await recarregar(H1.p.id)).status === "pago", JSON.stringify([r.status, j]));
+t("cartão: valor, CPF e e-mail vêm do pedido salvo (campos extras do navegador são ignorados)", cc.total_amount === (H1.p.total_centavos / 100).toFixed(2) && cc.payer.identification.number === CPF && cc.payer.email === "joao@exemplo.com" && cc.transactions.payments[0].payment_method.type === "credit_card" && cc.transactions.payments[0].payment_method.installments === 1, JSON.stringify(cc));
+await Promise.all(esperar.splice(0));
+t("cartão aprovado: e-mails de pagamento enfileirados", (await db.prepare("SELECT COUNT(*) n FROM emails WHERE pedido_id = ? AND tipo IN ('pago','loja_pago')").bind(H1.p.id).first()).n === 2);
+r = await pagarPost({ request: POST(cartao("TOKENOUTRO1234567890")), env, params: { token: H1.token }, waitUntil });
+t("pedido já pago não aceita outro pagamento (409)", r.status === 409);
+
+// parcelas: com máximo 3, aceita 3
+const H2 = await pedir();
+r = await pagarPost({ request: POST(cartao("TOKENPARCELADO1234567", { installments: 3 })), env: { ...env, MERCADOPAGO_PARCELAS_MAX: "3" }, params: { token: H2.token }, waitUntil });
+t("com máximo de 3 parcelas, 3x é aceito e vai ao Mercado Pago", r.status === 201 && chamadas.at(-1).corpo.transactions.payments[0].payment_method.installments === 3);
+
+// Pix aberto + cartão aprovado: o Pix é cancelado (não paga duas vezes)
+const H3 = await pedir();
+await pagarPost({ request: POST({ metodo: "pix" }), env, params: { token: H3.token }, waitUntil });
+const idPix = (await recarregar(H3.p.id)).pagamento_ref;
+await pagarPost({ request: POST(cartao("TOKENTROCA12345678901")), env, params: { token: H3.token }, waitUntil });
+t("pagou no cartão depois de gerar Pix: o Pix é cancelado", (await recarregar(H3.p.id)).status === "pago" && orders[idPix].status === "canceled", orders[idPix] && orders[idPix].status);
+const k1 = chamadas.filter((x) => x.caminho === "/v1/orders" && x.corpo.transactions.payments[0].payment_method.type === "credit_card").map((x) => x.headers["X-Idempotency-Key"]);
+t("cada tentativa de cartão usa chave de idempotência própria", new Set(k1).size === k1.length && k1.length >= 3, JSON.stringify(k1));
+
 // ---------- assinatura: id em minúsculas também vale ----------
 const idm = "ORDABC12345678";
 const ts = String(Math.floor(Date.now() / 1000));
@@ -168,6 +233,7 @@ const sigMin = `ts=${ts},v1=${crypto.createHmac("sha256", SEGREDO).update(`id:${
 t("assinatura calculada com o id em minúsculas também é aceita", await assinaturaValida(env, { assinatura: sigMin, requestId: "r9", dataId: idm }));
 t("assinatura com id diferente é recusada", !(await assinaturaValida(env, { assinatura: sigMin, requestId: "r9", dataId: "ORDOUTRO1234" })));
 
+await Promise.all(esperar.splice(0));
 globalThis.fetch = realFetch;
 console.log(`\n${ok} ok, ${bad} falhas`);
 await dispose();

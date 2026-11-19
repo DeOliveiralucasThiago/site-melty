@@ -44,6 +44,38 @@ export async function criarOrderPix(env, pedido) {
   return { id: o.id, codigo: pm.qr_code, qr_base64: pm.qr_code_base64 || "", ticket_url: pm.ticket_url || "", expira: pg.date_of_expiration || null };
 }
 
+/** Mensagem para o cliente a partir do motivo técnico da recusa (sem expor detalhes do banco). */
+export function motivoRecusa(detalhe) {
+  const d = String(detalhe || "");
+  if (/insufficient_amount/.test(d)) return "O cartão não tem limite ou saldo suficiente. Tente outro cartão.";
+  if (/security_code|bad_filled/.test(d)) return "Confira o código de segurança e a validade do cartão.";
+  if (/call_for_authorize|high_risk|blacklist|rejected_by_issuer|rejected_by_bank/.test(d)) return "O banco não autorizou o pagamento. Tente outro cartão ou fale com o seu banco.";
+  return "Não foi possível aprovar o pagamento. Confira os dados ou tente outro cartão.";
+}
+
+/**
+ * Paga o pedido com cartão de crédito. O token do cartão é gerado pelo Mercado Pago no navegador (os dados do cartão nunca passam pelo nosso servidor).
+ * Recusa vem como HTTP 402 com a order dentro do erro: devolvida como order "failed" (não é erro do site).
+ * Valor, CPF e e-mail são os do pedido salvo, nunca os que o navegador mandar.
+ */
+export async function criarOrderCartao(env, pedido, { token, paymentMethodId, parcelas }) {
+  const corpo = {
+    type: "online", processing_mode: "automatic", total_amount: reais(pedido.total_centavos), external_reference: pedido.token,
+    payer: { email: pedido.cliente_email, ...partirNome(pedido.cliente_nome), identification: { type: "CPF", number: pedido.cliente_cpf } },
+    transactions: { payments: [{ amount: reais(pedido.total_centavos), payment_method: { id: paymentMethodId, type: "credit_card", token, installments: parcelas } }] },
+  };
+  try {
+    return await chamar(env, "POST", "/v1/orders", corpo, `cartao-${pedido.token}-${String(token).slice(-12)}`);   // token do cartão é de uso único: cada tentativa tem a sua chave
+  } catch (e) {
+    const data = e instanceof ErroMP && e.status === 402 && e.detalhes && e.detalhes.data;
+    if (data && data.id) {
+      const det = e.detalhes.errors && e.detalhes.errors[0] && e.detalhes.errors[0].details && e.detalhes.errors[0].details[0];
+      return { ...data, status: "failed", status_detail: data.status_detail || "failed", motivo: String(det || "") };
+    }
+    throw e;
+  }
+}
+
 export const buscarOrder = (env, id) => chamar(env, "GET", `/v1/orders/${encodeURIComponent(id)}`);
 export const cancelarOrder = (env, id) => chamar(env, "POST", `/v1/orders/${encodeURIComponent(id)}/cancel`);
 

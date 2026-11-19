@@ -588,15 +588,49 @@
       if (p.pix) { mostrarPix(p); return; }
       app.innerHTML = '<div class="wrap page"><h1>Pagamento</h1><p class="muted">Pedido #' + p.numero + " · " + brl.format(p.total) + '</p>' +
         '<p>Reservamos seus itens até ' + esc(quando(p.expira_em)) + '. Escolha como quer pagar:</p>' +
-        '<p><button class="btn" id="pix">Pagar com Pix</button></p><p id="erro" class="small" role="alert"></p></div>';
+        '<p><button class="btn" id="pix">Pagar com Pix</button>' + (p.cartao ? ' <button class="btn ghost" id="cartao">Pagar com cartão de crédito</button>' : "") + '</p>' +
+        '<div id="area-cartao"></div><p id="erro" class="small" role="alert"></p></div>';
+      var erroEl = document.getElementById("erro");
       document.getElementById("pix").onclick = function () {
         var b = this; b.disabled = true; b.textContent = "Gerando o Pix…";
         enviarJson("/api/pagar/" + encodeURIComponent(token), { metodo: "pix" }).then(function (r) {
-          if (!r.ok) { document.getElementById("erro").textContent = (r.dados && r.dados.erro) || "Não foi possível gerar o Pix."; b.disabled = false; b.textContent = "Pagar com Pix"; return; }
+          if (!r.ok) { erroEl.textContent = (r.dados && r.dados.erro) || "Não foi possível gerar o Pix."; b.disabled = false; b.textContent = "Pagar com Pix"; return; }
           mostrarPix(r.dados);
-        }).catch(function () { document.getElementById("erro").textContent = "Sem conexão. Tente de novo."; b.disabled = false; b.textContent = "Pagar com Pix"; });
+        }).catch(function () { erroEl.textContent = "Sem conexão. Tente de novo."; b.disabled = false; b.textContent = "Pagar com Pix"; });
       };
+      if (p.cartao) document.getElementById("cartao").onclick = function () { this.disabled = true; abrirCartao(p); };
     }).catch(function () { falha("Não encontramos este pedido. Confira o link que enviamos por e-mail."); });
+    // Formulário de cartão do Mercado Pago (os dados do cartão vão direto ao Mercado Pago; aqui chega só um código de uso único)
+    function abrirCartao(p) {
+      var area = document.getElementById("area-cartao"), erroEl = document.getElementById("erro");
+      area.innerHTML = '<div id="brick-cartao"><p class="muted">Carregando o formulário seguro…</p></div>';
+      function iniciar() {
+        var mp = new window.MercadoPago(p.cartao.public_key, { locale: "pt-BR" });
+        mp.bricks().create("cardPayment", "brick-cartao", {
+          initialization: { amount: p.total },
+          customization: { paymentMethods: { minInstallments: 1, maxInstallments: p.cartao.parcelas_max } },
+          callbacks: {
+            onReady: function () { /* formulário pronto */ },
+            onSubmit: function (dados) {
+              var f = dados && dados.formData ? dados.formData : dados;
+              return new Promise(function (resolver, rejeitar) {
+                erroEl.textContent = "";
+                enviarJson("/api/pagar/" + encodeURIComponent(token), { metodo: "cartao", token: f.token, payment_method_id: f.payment_method_id, installments: f.installments }).then(function (r) {
+                  if (r.ok) { resolver(); location.href = pedidoUrl(); return; }
+                  erroEl.textContent = (r.dados && r.dados.erro) || "Não foi possível processar o cartão.";
+                  rejeitar();
+                }).catch(function () { erroEl.textContent = "Sem conexão. Tente de novo."; rejeitar(); });
+              });
+            },
+            onError: function () { erroEl.textContent = "Confira os dados do cartão e tente de novo."; }
+          }
+        });
+      }
+      if (window.MercadoPago) { iniciar(); return; }
+      var sc = document.createElement("script"); sc.src = "https://sdk.mercadopago.com/js/v2"; sc.onload = iniciar;
+      sc.onerror = function () { area.innerHTML = ""; erroEl.textContent = "Não foi possível carregar o formulário de cartão. Use o Pix ou tente de novo."; };
+      document.head.appendChild(sc);
+    }
   }
 
   /* ---------- páginas de texto (editáveis pelo painel) ---------- */
